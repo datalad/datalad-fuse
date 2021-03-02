@@ -29,7 +29,7 @@ if __name__ == '__main__':
                   # the label in front of '=' is the command suite label
                   # the entrypoint can point to any symbol of any name, as long it is
                   # valid datalad interface specification (see demo in this extensions
-                  'helloworld=datalad_fuse:command_suite',
+                  'fuse=datalad_fuse:command_suite',
               ],
           },
     )

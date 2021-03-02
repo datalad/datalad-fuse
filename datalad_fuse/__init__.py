@@ -1,4 +1,4 @@
-"""DataLad demo extension"""
+"""DataLad FUSE extension"""
 
 __docformat__ = 'restructuredtext'
 
@@ -19,7 +19,7 @@ from datalad.interface.results import get_status_dict
 # to be found by datalad
 command_suite = (
     # description of the command suite, displayed in cmdline help
-    "DataLad FUSE",
+    "DataLad FUSE command suite",
     [
         # specification of a command, any number of commands can be defined
         (
@@ -48,44 +48,29 @@ class FuseFS(Interface):
 
     # parameters of the command, must be exhaustive
     _params_ = dict(
-        # name of the parameter, must match argument name
-        language=Parameter(
-            # cmdline argument definitions, incl aliases
-            args=("-l", "--language"),
-            # documentation
-            doc="""language to say "hello" in""",
-            # type checkers, constraint definition is automatically
-            # added to the docstring
-            constraints=EnsureChoice('en', 'de')),
     )
 
     @staticmethod
     # decorator binds the command to the Dataset class as a method
-    @datasetmethod(name='fusefs')
+    #@datasetmethod(name='fusefs')
     # generic handling of command results (logging, rendering, filtering, ...)
     @eval_results
     # signature must match parameter list above
     # additional generic arguments are added by decorators
-    def __call__(language='en'):
-        if language == 'en':
-            msg = 'Hello!'
-        elif language == 'de':
-            msg = 'Tachchen!'
-        else:
-            msg = ("unknown language: '%s'", language)
+    def __call__():
 
         # commands should be implemented as generators and should
         # report any results by yielding status dictionaries
         yield get_status_dict(
             # an action label must be defined, the command name make a good
             # default
-            action='demo',
+            action='fusefs',
             # most results will be about something associated with a dataset
             # (component), reported paths MUST be absolute
             path=abspath(curdir),
             # status labels are used to identify how a result will be reported
             # and can be used for filtering
-            status='ok' if language in ('en', 'de') else 'error',
+            status='ok',
             # arbitrary result message, can be a str or tuple. in the latter
             # case string expansion with arguments is delayed until the
             # message actually needs to be rendered (analog to exception messages)
