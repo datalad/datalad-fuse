@@ -19,18 +19,18 @@ from datalad.interface.results import get_status_dict
 # to be found by datalad
 command_suite = (
     # description of the command suite, displayed in cmdline help
-    "Demo DataLad command suite",
+    "DataLad FUSE",
     [
         # specification of a command, any number of commands can be defined
         (
             # importable module that contains the command implementation
-            'datalad_helloworld',
+            'datalad_fuse',
             # name of the command class implementation in above module
-            'HelloWorld',
+            'FuseFS',
             # optional name of the command in the cmdline API
-            'hello-cmd',
+            'fusefs',
             # optional name of the command in the Python API
-            'hello_cmd'
+            'fusefs'
         ),
     ]
 )
@@ -39,12 +39,11 @@ command_suite = (
 # decoration auto-generates standard help
 @build_doc
 # all commands must be derived from Interface
-class HelloWorld(Interface):
+class FuseFS(Interface):
     # first docstring line is used a short description in the cmdline help
     # the rest is put in the verbose help and manpage
-    """Short description of the command
+    """FUSE File system providing transparent access to files under DataLad control
 
-    Long description of arbitrary volume.
     """
 
     # parameters of the command, must be exhaustive
@@ -62,7 +61,7 @@ class HelloWorld(Interface):
 
     @staticmethod
     # decorator binds the command to the Dataset class as a method
-    @datasetmethod(name='hello_cmd')
+    @datasetmethod(name='fusefs')
     # generic handling of command results (logging, rendering, filtering, ...)
     @eval_results
     # signature must match parameter list above
