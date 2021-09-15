@@ -75,7 +75,7 @@ def write_op(f):
     return None
 
 
-@lru_cache
+@lru_cache(None)
 def _get_annex_repo_key(path):
     path = op.realpath(path)
     res = ANNEX_KEY_PATH_REGEX.search(path)
