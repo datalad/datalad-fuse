@@ -32,6 +32,7 @@ command_suite = (
             # optional name of the command in the Python API
             'fusefs'
         ),
+        ("datalad_fuse.fsspec_head", "FsspecHead", "fsspec-head", "fsspec_head"),
     ]
 )
 
