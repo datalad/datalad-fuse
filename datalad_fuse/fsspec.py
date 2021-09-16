@@ -33,12 +33,17 @@ class FsspecAdapter:
     def open(self, filepath: Union[str, Path], mode: str = "rb") -> IO:
         if mode != "rb":
             raise ValueError("'mode' must be 'rb'")
-        for url in self.get_urls(filepath):
-            try:
-                return self.fs.open(url, mode)
-            except FileNotFoundError as e:
-                lgr.debug("Failed to open file %s at URL %s: %s", filepath, url, str(e))
-        raise IOError(f"Could not find a usable URL for {filepath}")
+        if self.annex.is_under_annex(filepath):
+            for url in self.get_urls(filepath):
+                try:
+                    return self.fs.open(url, mode)
+                except FileNotFoundError as e:
+                    lgr.debug(
+                        "Failed to open file %s at URL %s: %s", filepath, url, str(e)
+                    )
+            raise IOError(f"Could not find a usable URL for {filepath}")
+        else:
+            return open(filepath, mode)
 
     def clear(self) -> None:
         self.fs.clear_cache()
