@@ -1,4 +1,5 @@
 from itertools import islice
+import os.path
 import sys
 from typing import Any, Dict, Iterator, Optional
 
@@ -26,7 +27,7 @@ class FsspecHead(Interface):
     remote URL
     """
 
-    result_renderer = 'tailored'
+    result_renderer = "tailored"
 
     _params_ = {
         "dataset": Parameter(
@@ -68,6 +69,8 @@ class FsspecHead(Interface):
         elif lines is None and bytes is None:
             lines = DEFAULT_LINES
         fsa = FsspecAdapter(ds.path)
+        if not os.path.isabs(path):
+            path = os.path.join(ds.path, path)
         with fsa.open(path) as fp:
             if lines is not None:
                 blob = b"".join(islice(fp, lines))
