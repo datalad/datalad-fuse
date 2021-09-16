@@ -1,4 +1,5 @@
 from itertools import islice
+import sys
 from typing import Any, Dict, Iterator, Optional
 
 from datalad.distribution.dataset import (
@@ -24,6 +25,8 @@ class FsspecHead(Interface):
     Show leading lines/bytes of an annexed file by fetching its data from a
     remote URL
     """
+
+    result_renderer = 'tailored'
 
     _params_ = {
         "dataset": Parameter(
@@ -70,4 +73,8 @@ class FsspecHead(Interface):
                 blob = b"".join(islice(fp, lines))
             else:
                 blob = fp.read(bytes)
-        yield get_status_dict(action="fsspec-head", ds=ds, status="ok", message=blob)
+        yield get_status_dict(action="fsspec-head", ds=ds, status="ok", data=blob)
+
+    @staticmethod
+    def custom_result_renderer(res, **kwargs):
+        sys.stdout.buffer.write(res["data"])
