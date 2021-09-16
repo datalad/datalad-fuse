@@ -34,7 +34,9 @@ class FsspecAdapter:
     def open(self, filepath: Union[str, Path], mode: str = "rb") -> IO:
         if mode != "rb":
             raise ValueError("'mode' must be 'rb'")
-        if self.annex.is_under_annex(filepath):
+        if self.annex.is_under_annex(filepath) and not self.annex.file_has_content(
+            filepath
+        ):
             for url in self.get_urls(filepath):
                 try:
                     return self.fs.open(url, mode)
