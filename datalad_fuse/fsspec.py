@@ -27,8 +27,9 @@ class FsspecAdapter:
     def get_urls(self, filepath: Union[str, Path]) -> Iterator[str]:
         whereis = self.annex.whereis(str(filepath), output="full")
         for v in whereis.values():
-            if v["description"] == "web":
-                yield from v["urls"]
+            for u in v["urls"]:
+                if u.lower().startswith(("http://", "https://")):
+                    yield u
 
     def open(self, filepath: Union[str, Path], mode: str = "rb") -> IO:
         if mode != "rb":
