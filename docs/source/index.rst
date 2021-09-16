@@ -15,6 +15,7 @@ High-level API commands
 .. autosummary::
    :toctree: generated
 
+   fsspec_head
    fusefs
 
 
@@ -24,6 +25,7 @@ Command line reference
 .. toctree::
    :maxdepth: 1
 
+   generated/man/datalad-fsspec-head
    generated/man/datalad-fusefs
 
 
