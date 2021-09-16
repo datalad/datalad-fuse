@@ -1,8 +1,12 @@
+import logging
 from pathlib import Path
-from typing import IO, Union
+from typing import IO, Iterator, Union
+
 from datalad.support.annexrepo import AnnexRepo
 import fsspec
 from fsspec.implementations.cached import CachingFileSystem
+
+lgr = logging.getLogger("datalad_fuse.fsspec")
 
 
 class FsspecAdapter:
@@ -20,19 +24,21 @@ class FsspecAdapter:
             # same_names=True
         )
 
-    def get_url(self, filepath: Union[str, Path]) -> str:
+    def get_urls(self, filepath: Union[str, Path]) -> Iterator[str]:
         whereis = self.annex.whereis(str(filepath), output="full")
         for v in whereis.values():
             if v["description"] == "web":
-                for u in v["urls"]:
-                    return u
-        raise ValueError(f"No URL in git-annex for {filepath}")
+                yield from v["urls"]
 
     def open(self, filepath: Union[str, Path], mode: str = "rb") -> IO:
         if mode != "rb":
             raise ValueError("'mode' must be 'rb'")
-        url = self.get_url(filepath)
-        return self.fs.open(url, mode)
+        for url in self.get_urls(filepath):
+            try:
+                return self.fs.open(url, mode)
+            except FileNotFoundError as e:
+                lgr.debug("Failed to open file %s at URL %s: %s", filepath, url, str(e))
+        raise IOError(f"Could not find a usable URL for {filepath}")
 
     def clear(self) -> None:
         self.fs.clear_cache()
