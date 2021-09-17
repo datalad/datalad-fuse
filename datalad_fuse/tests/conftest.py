@@ -9,7 +9,7 @@ import requests
 
 DATA_DIR = Path(__file__).with_name("data")
 
-LOCAL_SERVER_PORT = 8000
+LOCAL_SERVER_PORT = 60069
 
 
 @pytest.fixture(scope="session")
