@@ -31,7 +31,7 @@ def local_server():
     url = f"http://127.0.0.1:{LOCAL_SERVER_PORT}"
     for _ in range(10):
         try:
-            requests.get(url)
+            requests.get(url, timeout=1)
         except requests.RequestException:
             time.sleep(0.1)
         else:
