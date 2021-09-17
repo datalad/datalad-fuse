@@ -57,17 +57,22 @@ def url_dataset(local_server, request, tmp_path):
     ds = Dataset(str(tmp_path)).create()
     for p in DATA_DIR.iterdir():
         if p.is_file():
-            # Add an invalid URL in order to test bad-URL-fallback.
-            # It appears that git annex returns files' URLs in lexicographic
-            # order, so in order for the bad URL to be tried first, we insert a
-            # '0'.
-            ds.repo.add_url_to_file(
-                p.name, f"{local_server}/0{p.name}", options=["--relaxed"]
-            )
             if request.param == "remote":
                 ds.repo.add_url_to_file(
                     p.name, f"{local_server}/{p.name}", options=["--relaxed"]
                 )
             else:
                 ds.download_url(urls=f"{local_server}/{p.name}", path=p.name)
+            # Add an invalid URL in order to test bad-URL-fallback.
+            # Add it after `download_url()` is called in order to not cause an
+            #  error on filesystems without symlinks (in which case doing
+            #  `add_url_to_file()` would cause the file to be created as a
+            #  non-symlink, which `download_url()` would then see as the file
+            #  already being present, leading to an error).
+            # It appears that git annex returns files' URLs in lexicographic
+            #  order, so in order for the bad URL to be tried first, we insert
+            #  a '0'.
+            ds.repo.add_url_to_file(
+                p.name, f"{local_server}/0{p.name}", options=["--relaxed"]
+            )
     return ds
