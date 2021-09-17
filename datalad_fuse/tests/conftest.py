@@ -41,12 +41,22 @@ def local_server():
     process.wait()
 
 
-@pytest.fixture
-def remoted_dataset(local_server, tmp_path):
+@pytest.fixture(params=["remote", "local"])
+def url_dataset(local_server, request, tmp_path):
     ds = Dataset(str(tmp_path)).create()
     for p in DATA_DIR.iterdir():
         if p.is_file():
+            # Add an invalid URL in order to test bad-URL-fallback.
+            # It appears that git annex returns files' URLs in lexicographic
+            # order, so in order for the bad URL to be tried first, we insert a
+            # '0'.
             ds.repo.add_url_to_file(
-                p.name, f"{local_server}/{p.name}", options=["--relaxed"]
+                p.name, f"{local_server}/0{p.name}", options=["--relaxed"]
             )
+            if request.param == "remote":
+                ds.repo.add_url_to_file(
+                    p.name, f"{local_server}/{p.name}", options=["--relaxed"]
+                )
+            else:
+                ds.download_url(urls=f"{local_server}/{p.name}", path=p.name)
     return ds

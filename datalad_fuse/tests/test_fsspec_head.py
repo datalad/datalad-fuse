@@ -1,13 +1,11 @@
-### TODO: Run each test on both a dataset with non-locally-available files and
-### a dataset with locally-available files
-
-from datalad.api import Dataset  # noqa
+# datalad.api needs to be imported in order for fsspec_head to be available
+import datalad.api  # noqa
 from datalad.tests.utils import assert_in_results
 
 
-def test_get_default_lines_text(remoted_dataset):
+def test_get_default_lines_text(url_dataset):
     assert_in_results(
-        remoted_dataset.fsspec_head("text.txt"),
+        url_dataset.fsspec_head("text.txt"),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -26,9 +24,9 @@ claritatem insitam; est usus legentis in iis qui facit eorum claritatem.
     )
 
 
-def test_get_lines_text(remoted_dataset):
+def test_get_lines_text(url_dataset):
     assert_in_results(
-        remoted_dataset.fsspec_head("text.txt", lines=4),
+        url_dataset.fsspec_head("text.txt", lines=4),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -41,9 +39,9 @@ ut aliquip ex ea commodo consequat.  Duis autem vel eum iriure dolor in
     )
 
 
-def test_get_bytes_text(remoted_dataset):
+def test_get_bytes_text(url_dataset):
     assert_in_results(
-        remoted_dataset.fsspec_head("text.txt", bytes=100),
+        url_dataset.fsspec_head("text.txt", bytes=100),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -53,9 +51,9 @@ euismod tincidunt ut""",
     )
 
 
-def test_get_lines_binary(remoted_dataset):
+def test_get_lines_binary(url_dataset):
     assert_in_results(
-        remoted_dataset.fsspec_head("binary.png", lines=3),
+        url_dataset.fsspec_head("binary.png", lines=3),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -71,9 +69,9 @@ def test_get_lines_binary(remoted_dataset):
     )
 
 
-def test_get_bytes_binary(remoted_dataset):
+def test_get_bytes_binary(url_dataset):
     assert_in_results(
-        remoted_dataset.fsspec_head("binary.png", bytes=100),
+        url_dataset.fsspec_head("binary.png", bytes=100),
         action="fsspec-head",
         type="dataset",
         status="ok",
