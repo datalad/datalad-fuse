@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import IO, Iterator, Union
+from typing import IO, Iterator, Optional, Union
 
 from datalad.support.annexrepo import AnnexRepo
 import fsspec
@@ -31,22 +31,32 @@ class FsspecAdapter:
                 if u.lower().startswith(("http://", "https://")):
                     yield u
 
-    def open(self, filepath: Union[str, Path], mode: str = "rb") -> IO:
-        if mode != "rb":
-            raise ValueError("'mode' must be 'rb'")
+    def open(
+        self,
+        filepath: Union[str, Path],
+        mode: str = "rb",
+        encoding: str = "utf-8",
+        errors: Optional[str] = None,
+    ) -> IO:
+        if mode not in ("r", "rb", "rt"):
+            raise NotImplementedError("Only modes 'r', 'rb', and 'rt' are supported")
+        if mode == "rb":
+            kwargs = {}
+        else:
+            kwargs = {"encoding": encoding, "errors": None}
         if self.annex.is_under_annex(filepath) and not self.annex.file_has_content(
             filepath
         ):
             for url in self.get_urls(filepath):
                 try:
-                    return self.fs.open(url, mode)
+                    return self.fs.open(url, mode, **kwargs)
                 except FileNotFoundError as e:
                     lgr.debug(
                         "Failed to open file %s at URL %s: %s", filepath, url, str(e)
                     )
             raise IOError(f"Could not find a usable URL for {filepath}")
         else:
-            return open(filepath, mode)
+            return open(filepath, mode, **kwargs)
 
     def clear(self) -> None:
         self.fs.clear_cache()
