@@ -1,6 +1,8 @@
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import logging
+import multiprocessing
+import os
 from pathlib import Path
-import subprocess
-import sys
 import time
 
 from datalad.distribution.dataset import Dataset
@@ -9,38 +11,45 @@ import requests
 
 DATA_DIR = Path(__file__).with_name("data")
 
-LOCAL_SERVER_PORT = 60069
+lgr = logging.getLogger("datalad_fuse.tests")
+
+
+def serve_path_via_http(hostname, path, queue):
+    os.chdir(path)
+    httpd = HTTPServer((hostname, 0), SimpleHTTPRequestHandler)
+    queue.put(httpd.server_port)
+    httpd.serve_forever()
 
 
 @pytest.fixture(scope="session")
 def local_server():
-    # Based on <https://pawamoy.github.io/posts/local-http-server-fake-files
-    # -testing-purposes/#pytest-fixture>
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "http.server",
-            "--bind",
-            "127.0.0.1",
-            "--directory",
-            str(DATA_DIR),
-            str(LOCAL_SERVER_PORT),
-        ]
+    hostname = "127.0.0.1"
+    queue = multiprocessing.Queue()
+    p = multiprocessing.Process(
+        target=serve_path_via_http, args=(hostname, DATA_DIR, queue)
     )
-    url = f"http://127.0.0.1:{LOCAL_SERVER_PORT}"
-    for _ in range(10):
-        try:
-            requests.get(url, timeout=1)
-        except requests.RequestException:
-            time.sleep(0.1)
-        else:
-            break
-    else:
-        raise RuntimeError("Server did not come up in time")
-    yield url
-    process.kill()
-    process.wait()
+    p.start()
+    try:
+        port = queue.get(timeout=300)
+        url = f"http://{hostname}:{port}"
+        lgr.debug("HTTP: serving %s at %s", DATA_DIR, url)
+        # The normal monkeypatch fixture cannot be used in a session fixture,
+        # so we have to instantiate the class directly.
+        with pytest.MonkeyPatch().context() as m:
+            m.delenv("http_proxy", raising=False)
+            for _ in range(10):
+                try:
+                    requests.get(url, timeout=1)
+                except requests.RequestException:
+                    time.sleep(0.1)
+                else:
+                    break
+            else:
+                raise RuntimeError("Server did not come up in time")
+            yield url
+    finally:
+        lgr.debug("HTTP: stopping server")
+        p.terminate()
 
 
 @pytest.fixture(params=["remote", "local"])
