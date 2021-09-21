@@ -26,10 +26,45 @@ class FsspecAdapter:
 
     def get_urls(self, filepath: Union[str, Path]) -> Iterator[str]:
         whereis = self.annex.whereis(str(filepath), output="full")
-        for v in whereis.values():
+        remote_uuids = []
+        for ru, v in whereis.items():
+            remote_uuids.append(ru)
             for u in v["urls"]:
-                if u.lower().startswith(("http://", "https://")):
+                if is_http_url(u):
                     yield u
+        key = self.annex.get_file_key(filepath)
+        path_mixed = self.annex.call_annex_oneline(
+            [
+                "examinekey",
+                "--format=annex/objects/${hashdirmixed}${key}/${key}\\n",
+                key,
+            ]
+        )
+        path_lower = self.annex.call_annex_oneline(
+            [
+                "examinekey",
+                "--format=annex/objects/${hashdirlower}${key}/${key}\\n",
+                key,
+            ]
+        )
+        uuid2remote = self.annex.get_special_remotes()
+        for ru in remote_uuids:
+            try:
+                base_url = uuid2remote[ru]["location"]
+            except KeyError:
+                continue
+            if is_http_url(base_url):
+                if base_url.lower().rstrip("/").endswith("/.git"):
+                    paths = [path_mixed, path_lower]
+                else:
+                    paths = [
+                        path_lower,
+                        path_mixed,
+                        f".git/{path_lower}",
+                        f".git/{path_mixed}",
+                    ]
+                for p in paths:
+                    yield base_url.rstrip("/") + "/" + p
 
     def open(
         self,
@@ -43,7 +78,7 @@ class FsspecAdapter:
         if mode == "rb":
             kwargs = {}
         else:
-            kwargs = {"encoding": encoding, "errors": None}
+            kwargs = {"encoding": encoding, "errors": errors}
         if self.annex.is_under_annex(filepath) and not self.annex.file_has_content(
             filepath
         ):
@@ -60,3 +95,7 @@ class FsspecAdapter:
 
     def clear(self) -> None:
         self.fs.clear_cache()
+
+
+def is_http_url(s):
+    return s.lower().startswith(("http://", "https://"))
