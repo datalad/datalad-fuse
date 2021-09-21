@@ -25,12 +25,6 @@ from datalad import cfg
 
 CACHE_DIR = op.join(cfg.obtain('datalad.locations.cache'), 'fuse')
 
-if op.lexists(CACHE_DIR):
-    raise RuntimeError(
-        f"Please first remove {CACHE_DIR}.  We are yet to figure out how to"
-        f" ensure correctly working persistent cache:"
-        f" https://github.com/intake/filesystem_spec/issues/553")
-
 # explicit blockcache instance for better control etc
 import fsspec.implementations.cached
 fs_block = fsspec.implementations.cached.CachingFileSystem(
