@@ -357,16 +357,3 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         with self.rwlock:
             os.lseek(fh, offset, 0)
             return os.write(fh, data)
-
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('root')
-    parser.add_argument('mount')
-    args = parser.parse_args()
-
-    fuse = FUSE(
-        DataLadFUSE(args.root), args.mount, foreground=True
-        # , allow_other=True
-        )
