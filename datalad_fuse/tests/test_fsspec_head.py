@@ -1,5 +1,3 @@
-# datalad.api needs to be imported in order for fsspec_head to be available
-import datalad.api  # noqa
 from datalad.tests.utils import assert_in_results
 from linesep import split_terminated
 import pytest

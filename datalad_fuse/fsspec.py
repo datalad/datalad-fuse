@@ -32,6 +32,7 @@ class FsspecAdapter:
             for u in v["urls"]:
                 if is_http_url(u):
                     yield u
+
         key = self.annex.get_file_key(filepath)
         path_mixed = self.annex.call_annex_oneline(
             [
@@ -47,10 +48,21 @@ class FsspecAdapter:
                 key,
             ]
         )
-        uuid2remote = self.annex.get_special_remotes()
+
+        uuid2remote_url = {}
+        for r in self.annex.get_remotes():
+            ru = self.annex.config.get(f"remote.{r}.annex-uuid")
+            if ru is None:
+                continue
+            remote_url = self.annex.config.get(f"remote.{r}.url")
+            if remote_url is None:
+                continue
+            remote_url = self.annex.config.rewrite_url(remote_url)
+            uuid2remote_url[ru] = remote_url
+
         for ru in remote_uuids:
             try:
-                base_url = uuid2remote[ru]["location"]
+                base_url = uuid2remote_url[ru]
             except KeyError:
                 continue
             if is_http_url(base_url):
