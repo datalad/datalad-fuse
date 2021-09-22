@@ -31,6 +31,10 @@ def tmp_home(monkeypatch, tmp_path_factory):
         '[annex "security"]\n'
         "allowed-url-schemes = http https file\n"
         "allowed-http-addresses = all\n"
+        "\n"
+        "[user]\n"
+        "name = Test User\n"
+        "email = test@test.nil\n"
     )
 
 
