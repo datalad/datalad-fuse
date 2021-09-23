@@ -55,7 +55,10 @@ command_suite = (
 class FuseFS(Interface):
     # first docstring line is used a short description in the cmdline help
     # the rest is put in the verbose help and manpage
-    """FUSE File system providing transparent access to files under DataLad control"""
+    """
+    FUSE File system providing transparent access to files under DataLad
+    control
+    """
 
     # parameters of the command, must be exhaustive
     _params_ = {
