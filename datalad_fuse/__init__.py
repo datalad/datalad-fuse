@@ -1,25 +1,23 @@
 """DataLad FUSE extension"""
 
-__docformat__ = 'restructuredtext'
+__docformat__ = "restructuredtext"
 
 from typing import Any, Dict, Iterator, Optional
 
-from os.path import curdir
-from os.path import abspath
-
-from datalad.interface.base import Interface
-from datalad.interface.base import build_doc
-from datalad.support.param import Parameter
-from datalad.distribution.dataset import datasetmethod
-from datalad.interface.utils import eval_results
-from datalad.support.constraints import EnsureChoice, EnsureNone
 from datalad.distribution.dataset import (
-    Dataset, EnsureDataset, require_dataset,
+    Dataset,
+    EnsureDataset,
+    datasetmethod,
+    require_dataset,
 )
-
+from datalad.interface.base import Interface, build_doc
 from datalad.interface.results import get_status_dict
-
+from datalad.interface.utils import eval_results
+from datalad.support.constraints import EnsureNone
+from datalad.support.param import Parameter
 from fuse import FUSE
+
+from ._version import get_versions
 from .fuse_ import DataLadFUSE
 
 # defines a datalad command suite
@@ -32,13 +30,13 @@ command_suite = (
         # specification of a command, any number of commands can be defined
         (
             # importable module that contains the command implementation
-            'datalad_fuse',
+            "datalad_fuse",
             # name of the command class implementation in above module
-            'FuseFS',
+            "FuseFS",
             # optional name of the command in the cmdline API
-            'fusefs',
+            "fusefs",
             # optional name of the command in the Python API
-            'fusefs'
+            "fusefs",
         ),
         ("datalad_fuse.fsspec_head", "FsspecHead", "fsspec-head", "fsspec_head"),
         (
@@ -47,7 +45,7 @@ command_suite = (
             "fsspec-cache-clear",
             "fsspec_cache_clear",
         ),
-    ]
+    ],
 )
 
 
@@ -57,8 +55,9 @@ command_suite = (
 class FuseFS(Interface):
     # first docstring line is used a short description in the cmdline help
     # the rest is put in the verbose help and manpage
-    """FUSE File system providing transparent access to files under DataLad control
-
+    """
+    FUSE File system providing transparent access to files under DataLad
+    control
     """
 
     # parameters of the command, must be exhaustive
@@ -83,19 +82,23 @@ class FuseFS(Interface):
 
     @staticmethod
     # decorator binds the command to the Dataset class as a method
-    @datasetmethod(name='fusefs')
+    @datasetmethod(name="fusefs")
     # generic handling of command results (logging, rendering, filtering, ...)
     @eval_results
     # signature must match parameter list above
     # additional generic arguments are added by decorators
-    def __call__(mount_path: str, dataset: Optional[Dataset] = None) -> Iterator[Dict[str, Any]]:
+    def __call__(
+        mount_path: str, dataset: Optional[Dataset] = None
+    ) -> Iterator[Dict[str, Any]]:
 
         ds = require_dataset(
             dataset, purpose="clear fsspec cache", check_installed=True
         )
 
-        fuse = FUSE(
-            DataLadFUSE(ds.path), mount_path, foreground=True
+        fuse = FUSE(  # noqa: F841
+            DataLadFUSE(ds.path),
+            mount_path,
+            foreground=True
             # , allow_other=True
         )
 
@@ -104,22 +107,19 @@ class FuseFS(Interface):
         yield get_status_dict(
             # an action label must be defined, the command name make a good
             # default
-            action='fusefs',
+            action="fusefs",
             # most results will be about something associated with a dataset
             # (component), reported paths MUST be absolute
             path=mount_path,
             # status labels are used to identify how a result will be reported
             # and can be used for filtering
-            status='ok',
+            status="ok",
             # arbitrary result message, can be a str or tuple. in the latter
             # case string expansion with arguments is delayed until the
             # message actually needs to be rendered (analog to exception messages)
-            message=msg)
+            # message=msg,
+        )
 
 
-from datalad import setup_package
-from datalad import teardown_package
-
-from ._version import get_versions
-__version__ = get_versions()['version']
+__version__ = get_versions()["version"]
 del get_versions

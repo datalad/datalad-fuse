@@ -79,5 +79,5 @@ class FsspecHead(Interface):
         yield get_status_dict(action="fsspec-head", ds=ds, status="ok", data=blob)
 
     @staticmethod
-    def custom_result_renderer(res, **kwargs):
+    def custom_result_renderer(res, **_):
         sys.stdout.buffer.write(res["data"])

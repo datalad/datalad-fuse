@@ -194,7 +194,7 @@ after_test:
   - python -m coverage xml
   - cmd: powershell Invoke-WebRequest -Uri 'https://codecov.io/bash' -OutFile codecov.sh
   - cmd: "set PATH=C:\\msys64\\usr\\bin;%PATH%"
-  - cmd: bash codecov.sh -f "coverage.xml" -U "-s" -A "-s" 
+  - cmd: bash codecov.sh -f "coverage.xml" -U "-s" -A "-s"
   - sh: bash <(curl -s https://codecov.io/bash)
 
 

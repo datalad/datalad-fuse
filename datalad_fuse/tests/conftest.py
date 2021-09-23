@@ -82,7 +82,7 @@ def data_server():
 
 # @pytest.mark.usefixtures("tmp_home")  # Doesn't work on fixture functions
 @pytest.fixture(params=["remote", "local", "cloned"])
-def url_dataset(data_files, data_server, request, tmp_home, tmp_path):
+def url_dataset(data_files, data_server, request, tmp_home, tmp_path):  # noqa: U100
     ds = Dataset(str(tmp_path / "ds")).create()
     for fname in data_files:
         if request.param == "remote":
