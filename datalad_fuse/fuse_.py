@@ -1,66 +1,56 @@
-from __future__ import print_function, absolute_import, division
+from __future__ import absolute_import, division, print_function
 
+from errno import ENOENT, EROFS
+from functools import lru_cache
 import io
+from itertools import chain
 import logging
 import os
 import os.path as op
+from os.path import realpath
 import re
 import stat
+from threading import Lock
 import time
 
-from itertools import chain
-from functools import lru_cache
-
-from errno import EACCES
-from os.path import realpath
-from threading import Lock
-
-from functools import wraps
-
-import fsspec
-from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
-
-from datalad.support.annexrepo import AnnexRepo
 from datalad import cfg
+from datalad.support.annexrepo import AnnexRepo
+import fsspec
+import fsspec.implementations.cached
+from fuse import FuseOSError, Operations
 
-CACHE_DIR = op.join(cfg.obtain('datalad.locations.cache'), 'fuse')
+CACHE_DIR = op.join(cfg.obtain("datalad.locations.cache"), "fuse")
 
 # explicit blockcache instance for better control etc
-import fsspec.implementations.cached
 fs_block = fsspec.implementations.cached.CachingFileSystem(
-        fs=fsspec.filesystem('http'), # , target_protocol='blockcache'),
-        #target_protocol='blockcache',
-        cache_storage=CACHE_DIR,
-        #cache_check=600,
-        #block_size=1024,
-        #check_files=True,
-        #expiry_times=True,
-        #same_names=True
-        )
-
-from errno import (
-    ENOENT,
-    EROFS,
+    fs=fsspec.filesystem("http"),  # , target_protocol='blockcache'),
+    # target_protocol='blockcache',
+    cache_storage=CACHE_DIR,
+    # cache_check=600,
+    # block_size=1024,
+    # check_files=True,
+    # expiry_times=True,
+    # same_names=True
 )
 
 # well -- in principle the key should also be repeated twice
 # now would also match directory itself
 # TODO: add lookahead or behind to match?
 ANNEX_KEY_PATH_REGEX = re.compile(
-    '(?P<repo_path>.*)\.git/annex/objects/.*/'
-    '(?P<key>'
-     '(?P<backend>[^-]+)-'
-     '(?P<maybesize>[^-]+)--[^/]*)$'
+    r"(?P<repo_path>.*)\.git/annex/objects/.*/"
+    r"(?P<key>"
+    r"(?P<backend>[^-]+)-"
+    r"(?P<maybesize>[^-]+)--[^/]*)$"
 )
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
-#BLOCK_SIZE = 2**20  # 1M. block size to fetch at a time.
+# BLOCK_SIZE = 2**20  # 1M. block size to fetch at a time.
 
-lgr = logging.getLogger('datalad.fuse')
+lgr = logging.getLogger("datalad.fuse")
 
 
-def write_op(f):
+def write_op(_f):
     """Decorator for operations which need to write
 
     We might not want them ATM
@@ -74,13 +64,12 @@ def _get_annex_repo_key(path):
     path = op.realpath(path)
     res = ANNEX_KEY_PATH_REGEX.search(path)
     if res:
-        return res['repo_path'], res['key']
+        return res["repo_path"], res["key"]
     else:
         return None, None
 
 
 class fsspecFiles:
-
     def __init__(self):
         self._files = {}
 
@@ -116,18 +105,19 @@ class fsspecFiles:
         data["st_mtime"] = time.time()
         return data
 
-    @lru_cache(1024)   # under assumption that we are in truly read-only mode
+    @lru_cache(1024)  # under assumption that we are in truly read-only mode
     # may be add fscache'ing?
     def _get_url(self, path):
         annex_repo, annex_key = _get_annex_repo_key(path)
         if annex_key:
             # so we do not have it yet!
             repo = AnnexRepo(annex_repo)
-            whereis = repo.whereis(annex_key, output='full', key=True) # , batch=True)
+            whereis = repo.whereis(annex_key, output="full", key=True)  # , batch=True)
             # TODO: support also regular http remotes etc
-            urls = list(chain(*(x.get('urls', []) for x in whereis.values())))
+            urls = list(chain(*(x.get("urls", []) for x in whereis.values())))
             # TODO: some kind of analysis/fallback and not just taking the first one
-            # TODO: Opened connections already might even have already some "equivalent" URL
+            # TODO: Opened connections already might even have already some
+            # "equivalent" URL
             if urls:
                 return urls[0]
 
@@ -148,11 +138,11 @@ class fsspecFiles:
             if url in self._files:
                 f = self._files[url]
             else:
-                #f = fsspec.open(
+                # f = fsspec.open(
                 #    f"blockcache::{url}",
                 #    blockcache={'cache_storage': CACHE_DIR}  # TODO
-                #)
-                self._files[url] = f = fs_block.open(url) # , block_size=BLOCK_SIZE)
+                # )
+                self._files[url] = f = fs_block.open(url)  # , block_size=BLOCK_SIZE)
             if f.closed:
                 f.open()
             return f
@@ -178,7 +168,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         lgr.log(5, "op=%s for path=%s with args %s", op, path, args)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
-    def destroy(self, path=None):
+    def destroy(self, _path=None):
         lgr.warning("Destroying fsspecs and cache of %d fhs", len(self._cache))
         try:
             self._fsspec_files.close()
@@ -190,13 +180,23 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     @staticmethod
     # XXX not yet sure what we need to filter...
     def _filter_stat(st):
-        return dict((key, getattr(st, key)) for key in (
-            'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
-            'st_nlink', 'st_size', 'st_uid'))
+        return dict(
+            (key, getattr(st, key))
+            for key in (
+                "st_atime",
+                "st_ctime",
+                "st_gid",
+                "st_mode",
+                "st_mtime",
+                "st_nlink",
+                "st_size",
+                "st_uid",
+            )
+        )
 
     def getattr(self, path, fh=None):
         # TODO: support of unlocked files... but at what cost?
-        if (fh and fh < self._counter_offset):
+        if fh and fh < self._counter_offset:
             return os.fstat(fh)
         elif op.exists(path):
             return self._filter_stat(os.stat(path))
@@ -207,7 +207,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 fsspec_file = self._fsspec_files._get_file(path)
             if fsspec_file:
                 if isinstance(fsspec_file, io.BufferedIOBase):
-                   # full file was already fetched locally
+                    # full file was already fetched locally
                     return self._filter_stat(os.stat(fsspec_file.name))
                 else:
                     return fsspecFiles.file_getattr(fsspec_file)
@@ -217,26 +217,29 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             return {}  # we have nothing to say.  TODO: proper return/error?
 
     def open(self, path, flags):
-        #fn = "".join([self.root, path.lstrip("/")])
+        # fn = "".join([self.root, path.lstrip("/")])
         if op.exists(path):
             fh = os.open(path, flags)
             if fh >= self._counter_offset:
-                raise RuntimeError("We got file handle %d, our hopes that we never get such high one were wrong" % fh)
+                raise RuntimeError(
+                    "We got file handle %d, our hopes that we never get such"
+                    " high one were wrong" % fh
+                )
             return fh
         else:
             if flags % 2 == 0:
                 # read
-                mode = "rb"
+                mode = "rb"  # noqa: F841
             else:
                 # write/create
                 raise FuseOSError(EROFS)
             fsspec_file = self._fsspec_files._get_file(path)
             # TODO: threadlock ?
-            self._cache[self._counter] = fsspec_file # self.fs.open(fn, mode)
+            self._cache[self._counter] = fsspec_file  # self.fs.open(fn, mode)
             self._counter += 1
             return self._counter - 1
 
-    def read(self, path, size, offset, fh):
+    def read(self, _path, size, offset, fh):
         if fh < self._counter_offset:
             with self.rwlock:
                 os.lseek(fh, offset, 0)
@@ -248,8 +251,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             f.seek(offset)
             return f.read(size)
 
-    def readdir(self, path, fh):
-        return ['.', '..'] + os.listdir(path)
+    def readdir(self, path, _fh):
+        return [".", ".."] + os.listdir(path)
 
     def release(self, path, fh):
         lgr.debug("Closing for %s fh=%d", path, fh)
@@ -280,7 +283,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 os.makedirs(linked_path_dir)
         return linked_path
 
-    #??? seek seems to be not implemented by fusepy/ Operations
+    # ??? seek seems to be not implemented by fusepy/ Operations
 
     #
     # Benign writeable operations which we can allow
@@ -291,12 +294,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     chmod = os.chmod
     chown = os.chown
 
-
-    def flush(self, path, fh):
+    def flush(self, _path, fh):
         if fh < self._counter_offset:
             return os.fsync(fh)
 
-    def fsync(self, path, datasync, fh):
+    def fsync(self, _path, datasync, fh):
         if fh < self._counter_offset:
             if datasync != 0:
                 return os.fdatasync(fh)
@@ -331,7 +333,6 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def rename(self, old, new):
         return os.rename(old, self.root + new)
 
-
     # def statfs(self, path):
     #     lgr.mydebug(f"statfs {path}")
     #     raise NotImplementedError()
@@ -345,15 +346,15 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         return os.symlink(source, target)
 
     @write_op
-    def truncate(self, path, length, fh=None):
-        with open(path, 'r+') as f:
+    def truncate(self, path, length, _fh=None):
+        with open(path, "r+") as f:
             f.truncate(length)
 
     unlink = write_op(os.unlink)
     utimens = os.utime
 
     @write_op
-    def write(self, path, data, offset, fh):
+    def write(self, _path, data, offset, fh):
         with self.rwlock:
             os.lseek(fh, offset, 0)
             return os.write(fh, data)
