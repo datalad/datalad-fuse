@@ -1,47 +1,16 @@
-from __future__ import absolute_import, division, print_function
-
 from errno import ENOENT, EROFS
-from functools import lru_cache
 import io
-from itertools import chain
 import logging
 import os
 import os.path as op
-from os.path import realpath
-import re
 import stat
 from threading import Lock
 import time
 
-from datalad import cfg
 from datalad.support.annexrepo import AnnexRepo
-import fsspec
-import fsspec.implementations.cached
 from fuse import FuseOSError, Operations
 
-CACHE_DIR = op.join(cfg.obtain("datalad.locations.cache"), "fuse")
-
-# explicit blockcache instance for better control etc
-fs_block = fsspec.implementations.cached.CachingFileSystem(
-    fs=fsspec.filesystem("http"),  # , target_protocol='blockcache'),
-    # target_protocol='blockcache',
-    cache_storage=CACHE_DIR,
-    # cache_check=600,
-    # block_size=1024,
-    # check_files=True,
-    # expiry_times=True,
-    # same_names=True
-)
-
-# well -- in principle the key should also be repeated twice
-# now would also match directory itself
-# TODO: add lookahead or behind to match?
-ANNEX_KEY_PATH_REGEX = re.compile(
-    r"(?P<repo_path>.*)\.git/annex/objects/.*/"
-    r"(?P<key>"
-    r"(?P<backend>[^-]+)-"
-    r"(?P<maybesize>[^-]+)--[^/]*)$"
-)
+from .fsspec import FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
@@ -59,95 +28,6 @@ def write_op(_f):
     return None
 
 
-@lru_cache(None)
-def _get_annex_repo_key(path):
-    path = op.realpath(path)
-    res = ANNEX_KEY_PATH_REGEX.search(path)
-    if res:
-        return res["repo_path"], res["key"]
-    else:
-        return None, None
-
-
-class fsspecFiles:
-    def __init__(self):
-        self._files = {}
-
-    def close(self):
-        for f in self._files.values():
-            f.close()
-        self._files = {}
-
-    @classmethod
-    def file_getattr(cls, f):
-        # code borrowed from fsspec.fuse:FUSEr.getattr
-        # TODO: improve upon! there might be mtime of url
-        try:
-            info = f.info()
-        except FileNotFoundError:
-            raise FuseOSError(ENOENT)
-        # TODO Also I get UID.GID funny -- yarik, not yoh
-        # get of the original symlink, so float it up!
-        data = {"st_uid": 1000, "st_gid": 1000}
-        perm = 0o777
-
-        if info["type"] != "file":
-            data["st_mode"] = stat.S_IFDIR | perm
-            data["st_size"] = 0
-            data["st_blksize"] = 0
-        else:
-            data["st_mode"] = stat.S_IFREG | perm
-            data["st_size"] = info["size"]
-            data["st_blksize"] = 5 * 2 ** 20
-            data["st_nlink"] = 1
-        data["st_atime"] = time.time()
-        data["st_ctime"] = time.time()
-        data["st_mtime"] = time.time()
-        return data
-
-    @lru_cache(1024)  # under assumption that we are in truly read-only mode
-    # may be add fscache'ing?
-    def _get_url(self, path):
-        annex_repo, annex_key = _get_annex_repo_key(path)
-        if annex_key:
-            # so we do not have it yet!
-            repo = AnnexRepo(annex_repo)
-            whereis = repo.whereis(annex_key, output="full", key=True)  # , batch=True)
-            # TODO: support also regular http remotes etc
-            urls = list(chain(*(x.get("urls", []) for x in whereis.values())))
-            # TODO: some kind of analysis/fallback and not just taking the first one
-            # TODO: Opened connections already might even have already some
-            # "equivalent" URL
-            if urls:
-                return urls[0]
-
-    # TODO: add proper caching and "expunging" of those fsspec instances?
-    def _get_file(self, path):
-        """Given an annexed (full) path return an open fsspec File
-
-        path must be a symlink, no unlocked files or funny file systems
-        are supported ATM. (TODO for those who care, but I should make benchmarks first)
-
-        If that File (for a url) is not yet known, it will open a
-        new one with the blockcache.
-
-        It would return None if no URL for a path
-        """
-        url = self._get_url(path)
-        if url:
-            if url in self._files:
-                f = self._files[url]
-            else:
-                # f = fsspec.open(
-                #    f"blockcache::{url}",
-                #    blockcache={'cache_storage': CACHE_DIR}  # TODO
-                # )
-                self._files[url] = f = fs_block.open(url)  # , block_size=BLOCK_SIZE)
-            if f.closed:
-                f.open()
-            return f
-
-
 class DataLadFUSE(Operations):  # LoggingMixIn,
     # ??? TODO: since we would mix normal os.open
     # and not, we will mint our "fds" over this offset
@@ -155,9 +35,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     _counter_offset = 1000
 
     def __init__(self, root):
-        self.root = realpath(root)
+        self.root = op.realpath(root)
         self.rwlock = Lock()
-        self._fsspec_files = fsspecFiles()
+        self._adapter = FsspecAdapter(root)
         self._cache = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
         # and there is no seek so we should be ok even if the same file open
@@ -170,11 +50,12 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def destroy(self, _path=None):
         lgr.warning("Destroying fsspecs and cache of %d fhs", len(self._cache))
-        try:
-            self._fsspec_files.close()
-            self._cache = {}
-        except Exception as e:
-            lgr.error(e)
+        for f in self._cache.values():
+            try:
+                f.close()
+            except Exception as e:
+                lgr.error("%s", e)
+        self._cache = {}
         return 0
 
     @staticmethod
@@ -204,13 +85,13 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             if fh and fh >= self._counter_offset:
                 fsspec_file = self._cache[fh]
             else:
-                fsspec_file = self._fsspec_files._get_file(path)
+                fsspec_file = self._adapter.open(path)
             if fsspec_file:
                 if isinstance(fsspec_file, io.BufferedIOBase):
                     # full file was already fetched locally
                     return self._filter_stat(os.stat(fsspec_file.name))
                 else:
-                    return fsspecFiles.file_getattr(fsspec_file)
+                    return file_getattr(fsspec_file)
             # TODO: although seems to be logical -- seems to cause logging etc
             # lgr.error("ENOENTing %s %s", path, fh)
             # raise FuseOSError(ENOENT)
@@ -233,7 +114,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             else:
                 # write/create
                 raise FuseOSError(EROFS)
-            fsspec_file = self._fsspec_files._get_file(path)
+            fsspec_file = self._adapter.open(path)
             # TODO: threadlock ?
             self._cache[self._counter] = fsspec_file  # self.fs.open(fn, mode)
             self._counter += 1
@@ -271,8 +152,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def readlink(self, path):
         linked_path = os.readlink(path)
-        repo_path, annex_key = _get_annex_repo_key(linked_path)
-        if annex_key:
+        if AnnexRepo(self.root).is_under_annex(path):
             # TODO: we need all leading dirs to exist
             linked_path_full = op.join(op.dirname(path), linked_path)
             linked_path_dir = op.dirname(linked_path_full)
@@ -358,3 +238,29 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         with self.rwlock:
             os.lseek(fh, offset, 0)
             return os.write(fh, data)
+
+
+def file_getattr(f):
+    # code borrowed from fsspec.fuse:FUSEr.getattr
+    # TODO: improve upon! there might be mtime of url
+    try:
+        info = f.info()
+    except FileNotFoundError:
+        raise FuseOSError(ENOENT)
+    # TODO Also I get UID.GID funny -- yarik, not yoh
+    # get of the original symlink, so float it up!
+    data = {"st_uid": os.getuid(), "st_gid": os.getgid()}
+    perm = 0o777
+    if info["type"] != "file":
+        data["st_mode"] = stat.S_IFDIR | perm
+        data["st_size"] = 0
+        data["st_blksize"] = 0
+    else:
+        data["st_mode"] = stat.S_IFREG | perm
+        data["st_size"] = info["size"]
+        data["st_blksize"] = 5 * 2 ** 20
+        data["st_nlink"] = 1
+    data["st_atime"] = time.time()
+    data["st_ctime"] = time.time()
+    data["st_mtime"] = time.time()
+    return data
