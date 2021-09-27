@@ -81,44 +81,21 @@ class FuseFS(Interface):
     }
 
     @staticmethod
-    # decorator binds the command to the Dataset class as a method
     @datasetmethod(name="fusefs")
-    # generic handling of command results (logging, rendering, filtering, ...)
     @eval_results
-    # signature must match parameter list above
-    # additional generic arguments are added by decorators
     def __call__(
         mount_path: str, dataset: Optional[Dataset] = None
     ) -> Iterator[Dict[str, Any]]:
-
         ds = require_dataset(
-            dataset, purpose="clear fsspec cache", check_installed=True
+            dataset, purpose="mount as FUSE system", check_installed=True
         )
-
-        fuse = FUSE(  # noqa: F841
+        FUSE(
             DataLadFUSE(ds.path),
             mount_path,
             foreground=True
             # , allow_other=True
         )
-
-        # commands should be implemented as generators and should
-        # report any results by yielding status dictionaries
-        yield get_status_dict(
-            # an action label must be defined, the command name make a good
-            # default
-            action="fusefs",
-            # most results will be about something associated with a dataset
-            # (component), reported paths MUST be absolute
-            path=mount_path,
-            # status labels are used to identify how a result will be reported
-            # and can be used for filtering
-            status="ok",
-            # arbitrary result message, can be a str or tuple. in the latter
-            # case string expansion with arguments is delayed until the
-            # message actually needs to be rendered (analog to exception messages)
-            # message=msg,
-        )
+        yield get_status_dict(action="fusefs", path=mount_path, status="ok")
 
 
 __version__ = get_versions()["version"]
