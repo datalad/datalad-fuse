@@ -15,4 +15,4 @@ def test_fuse(data_files, tmp_path, url_dataset):
     )
     for fname, blob in data_files.items():
         assert (tmp_path / fname).read_bytes() == blob
-    subprocess.run(["fusermount", str(tmp_path)], check=True)
+    subprocess.run(["fusermount", "-u", str(tmp_path)], check=True)
