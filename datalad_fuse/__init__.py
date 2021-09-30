@@ -92,7 +92,7 @@ class FuseFS(Interface):
         FUSE(
             DataLadFUSE(ds.path),
             mount_path,
-            foreground=True
+            foreground=False,
             # , allow_other=True
         )
         yield get_status_dict(action="fusefs", path=mount_path, status="ok")
