@@ -45,7 +45,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         self._counter = DataLadFUSE._counter_offset
 
     def __call__(self, op, path, *args):
-        lgr.log(5, "op=%s for path=%s with args %s", op, path, args)
+        lgr.debug("op=%s for path=%s with args %s", op, path, args)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
     def destroy(self, _path=None):
@@ -77,10 +77,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def getattr(self, path, fh=None):
         # TODO: support of unlocked files... but at what cost?
+        lgr.debug("getattr(path=%r, fh=%r)", path, fh)
         if fh and fh < self._counter_offset:
-            return os.fstat(fh)
+            r = os.fstat(fh)
         elif op.exists(path):
-            return self._filter_stat(os.stat(path))
+            r = self._filter_stat(os.stat(path))
         else:
             if fh and fh >= self._counter_offset:
                 fsspec_file = self._cache[fh]
@@ -89,15 +90,19 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             if fsspec_file:
                 if isinstance(fsspec_file, io.BufferedIOBase):
                     # full file was already fetched locally
-                    return self._filter_stat(os.stat(fsspec_file.name))
+                    r = self._filter_stat(os.stat(fsspec_file.name))
                 else:
-                    return file_getattr(fsspec_file)
-            # TODO: although seems to be logical -- seems to cause logging etc
-            # lgr.error("ENOENTing %s %s", path, fh)
-            # raise FuseOSError(ENOENT)
-            return {}  # we have nothing to say.  TODO: proper return/error?
+                    r = file_getattr(fsspec_file)
+            else:
+                # TODO: although seems to be logical -- seems to cause logging etc
+                # lgr.error("ENOENTing %s %s", path, fh)
+                # raise FuseOSError(ENOENT)
+                r = {}  # we have nothing to say.  TODO: proper return/error?
+        lgr.debug("Returning %r", r)
+        return r
 
     def open(self, path, flags):
+        lgr.debug("open(path=%r, flags=%#x)", path, flags)
         # fn = "".join([self.root, path.lstrip("/")])
         if op.exists(path):
             fh = os.open(path, flags)
@@ -115,17 +120,21 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 # write/create
                 raise FuseOSError(EROFS)
             fsspec_file = self._adapter.open(path)
+            lgr.debug("Counter = %d", self._counter)
             # TODO: threadlock ?
             self._cache[self._counter] = fsspec_file  # self.fs.open(fn, mode)
             self._counter += 1
             return self._counter - 1
 
     def read(self, _path, size, offset, fh):
+        lgr.debug("read(path=%r, size=%r, offset=%r, fh=%r)", _path, size, offset, fh)
         if fh < self._counter_offset:
+            lgr.debug("Reading directly")
             with self.rwlock:
                 os.lseek(fh, offset, 0)
                 return os.read(fh, size)
         else:
+            lgr.debug("Reading from cache")
             # must be open already and we must have mapped it to fsspec file
             # TODO: check for path to correspond?
             f = self._cache[fh]
@@ -133,13 +142,16 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             return f.read(size)
 
     def readdir(self, path, _fh):
+        lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
         return [".", ".."] + os.listdir(path)
 
     def release(self, path, fh):
-        lgr.debug("Closing for %s fh=%d", path, fh)
+        lgr.debug("release(path=%r, fh=%r)", path, fh)
         if fh < self._counter_offset:
+            lgr.debug("Closing directly")
             os.close(fh)
         elif fh in self._cache:
+            lgr.debug("Popping from cache")
             f = self._cache.pop(fh)
             # but we do not close an fsspec instance, so it could be reused
             # on subsequent accesses
@@ -151,6 +163,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         return 0
 
     def readlink(self, path):
+        lgr.debug("readlink(path=%r)", path)
         linked_path = os.readlink(path)
         if AnnexRepo(self.root).is_under_annex(path):
             # TODO: we need all leading dirs to exist
@@ -175,11 +188,15 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     chown = os.chown
 
     def flush(self, _path, fh):
+        lgr.debug("flush(path=%r, fh=%r)", _path, fh)
         if fh < self._counter_offset:
+            lgr.debug("Flushing directly")
             return os.fsync(fh)
 
     def fsync(self, _path, datasync, fh):
+        lgr.debug("fsync(path=%r, datasync=%r, fh=%r)", _path, datasync, fh)
         if fh < self._counter_offset:
+            lgr.debug("Fsyncing directly")
             if datasync != 0:
                 return os.fdatasync(fh)
             else:
