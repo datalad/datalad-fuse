@@ -74,6 +74,11 @@ class FuseFS(Interface):
             metavar="PATH",
             doc="""Path where to mount the dataset (should exist).""",
         ),
+        "foreground": Parameter(
+            args=("-f", "--foreground"),
+            action="store_true",
+            doc="""Run process in foreground."""
+        )
         # TODO: (might better become config vars?)
         # --cache=persist
         # --recursive=follow,get - encountering submodule might install it first
@@ -84,7 +89,8 @@ class FuseFS(Interface):
     @datasetmethod(name="fusefs")
     @eval_results
     def __call__(
-        mount_path: str, dataset: Optional[Dataset] = None
+        mount_path: str, dataset: Optional[Dataset] = None,
+        foreground: bool = False
     ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(
             dataset, purpose="mount as FUSE system", check_installed=True
@@ -92,7 +98,7 @@ class FuseFS(Interface):
         FUSE(
             DataLadFUSE(ds.path),
             mount_path,
-            foreground=False,
+            foreground=foreground,
             # , allow_other=True
         )
         yield get_status_dict(action="fusefs", path=mount_path, status="ok")
