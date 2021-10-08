@@ -46,6 +46,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def __call__(self, op, path, *args):
         lgr.debug("op=%s for path=%s with args %s", op, path, args)
+        if path == "/.git" or path.startswith("/.git/"):
+            lgr.debug("Raising ENOENT for .git")
+            raise FuseOSError(ENOENT)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
     def destroy(self, _path=None):
@@ -143,7 +146,15 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def readdir(self, path, _fh):
         lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
-        return [".", ".."] + os.listdir(path)
+        paths = [".", ".."] + os.listdir(path)
+        if path == self.root + "/":
+            try:
+                paths.remove(".git")
+            except ValueError:
+                pass
+            else:
+                lgr.debug("Removed .git from dirlist")
+        return paths
 
     def release(self, path, fh):
         lgr.debug("release(path=%r, fh=%r)", path, fh)
