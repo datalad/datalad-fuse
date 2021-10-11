@@ -291,13 +291,12 @@ def file_getattr(f):
     # TODO Also I get UID.GID funny -- yarik, not yoh
     # get of the original symlink, so float it up!
     data = {"st_uid": os.getuid(), "st_gid": os.getgid()}
-    perm = 0o777
     if info["type"] != "file":
-        data["st_mode"] = stat.S_IFDIR | perm
+        data["st_mode"] = stat.S_IFDIR | 0o755
         data["st_size"] = 0
         data["st_blksize"] = 0
     else:
-        data["st_mode"] = stat.S_IFREG | perm
+        data["st_mode"] = stat.S_IFREG | 0o644
         data["st_size"] = info["size"]
         data["st_blksize"] = 5 * 2 ** 20
         data["st_nlink"] = 1
