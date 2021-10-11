@@ -82,24 +82,35 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         # TODO: support of unlocked files... but at what cost?
         lgr.debug("getattr(path=%r, fh=%r)", path, fh)
         if fh and fh < self._counter_offset:
+            lgr.debug("Calling os.fstat()")
             r = os.fstat(fh)
         elif op.exists(path):
+            lgr.debug("File exists; calling os.stat()")
             r = self._filter_stat(os.stat(path))
         else:
             if fh and fh >= self._counter_offset:
+                lgr.debug("File in cache")
                 fsspec_file = self._cache[fh]
+                to_close = False
             else:
+                lgr.debug("File not in cache")
                 fsspec_file = self._adapter.open(path)
+                to_close = True
             if fsspec_file:
                 if isinstance(fsspec_file, io.BufferedIOBase):
                     # full file was already fetched locally
+                    lgr.debug("File object is io.BufferedIOBase")
                     r = self._filter_stat(os.stat(fsspec_file.name))
                 else:
+                    lgr.debug("File object is fsspec object")
                     r = file_getattr(fsspec_file)
+                if to_close:
+                    fsspec_file.close()
             else:
                 # TODO: although seems to be logical -- seems to cause logging etc
                 # lgr.error("ENOENTing %s %s", path, fh)
                 # raise FuseOSError(ENOENT)
+                lgr.debug("File failed to open???")
                 r = {}  # we have nothing to say.  TODO: proper return/error?
         lgr.debug("Returning %r", r)
         return r
@@ -108,6 +119,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         lgr.debug("open(path=%r, flags=%#x)", path, flags)
         # fn = "".join([self.root, path.lstrip("/")])
         if op.exists(path):
+            lgr.debug("Path exists; opening directly")
             fh = os.open(path, flags)
             if fh >= self._counter_offset:
                 raise RuntimeError(
@@ -116,6 +128,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 )
             return fh
         else:
+            lgr.debug("Opening path via fsspec")
             if flags % 2 == 0:
                 # read
                 mode = "rb"  # noqa: F841

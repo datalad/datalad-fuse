@@ -91,11 +91,20 @@ class FsspecAdapter:
             kwargs = {}
         else:
             kwargs = {"encoding": encoding, "errors": errors}
-        if self.annex.is_under_annex(filepath) and not self.annex.file_has_content(
-            filepath
-        ):
+        a = self.annex.is_under_annex(filepath)
+        if a:
+            b = self.annex.file_has_content(filepath)
+            lgr.debug(
+                "%s: under annex, %s content", filepath, "has" if b else "does not have"
+            )
+        else:
+            b = False
+            lgr.debug("%s: not under annex", filepath)
+        if a and not b:
+            lgr.debug("%s: opening via fsspec", filepath)
             for url in self.get_urls(filepath):
                 try:
+                    lgr.debug("%s: Attempting to open via URL %s", filepath, url)
                     return self.fs.open(url, mode, **kwargs)
                 except FileNotFoundError as e:
                     lgr.debug(
@@ -103,6 +112,7 @@ class FsspecAdapter:
                     )
             raise IOError(f"Could not find a usable URL for {filepath}")
         else:
+            lgr.debug("%s: opening directly", filepath)
             return open(filepath, mode, **kwargs)
 
     def clear(self) -> None:
