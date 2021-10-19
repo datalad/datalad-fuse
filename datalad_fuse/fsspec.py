@@ -91,16 +91,18 @@ class FsspecAdapter:
             kwargs = {}
         else:
             kwargs = {"encoding": encoding, "errors": errors}
-        a = self.annex.is_under_annex(filepath)
-        if a:
-            b = self.annex.file_has_content(filepath)
+        under_annex = self.annex.is_under_annex(filepath)
+        if under_annex:
+            has_content = self.annex.file_has_content(filepath)
             lgr.debug(
-                "%s: under annex, %s content", filepath, "has" if b else "does not have"
+                "%s: under annex, %s content",
+                filepath,
+                "has" if has_content else "does not have",
             )
         else:
-            b = False
+            has_content = False
             lgr.debug("%s: not under annex", filepath)
-        if a and not b:
+        if under_annex and not has_content:
             lgr.debug("%s: opening via fsspec", filepath)
             for url in self.get_urls(filepath):
                 try:
