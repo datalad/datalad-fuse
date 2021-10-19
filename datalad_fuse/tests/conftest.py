@@ -15,6 +15,23 @@ DATA_DIR = Path(__file__).with_name("data")
 lgr = logging.getLogger("datalad_fuse.tests")
 
 
+def pytest_addoption(parser) -> None:
+    parser.addoption(
+        "--libfuse",
+        action="store_true",
+        default=False,
+        help="Enable fuse tests",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--libfuse"):
+        skip_no_libfuse = pytest.mark.skip(reason="Only run when --libfuse is given")
+        for item in items:
+            if "libfuse" in item.keywords:
+                item.add_marker(skip_no_libfuse)
+
+
 @pytest.fixture(scope="session")
 def data_files():
     return {p.name: p.read_bytes() for p in DATA_DIR.iterdir() if p.is_file()}
@@ -82,8 +99,11 @@ def data_server():
 
 # @pytest.mark.usefixtures("tmp_home")  # Doesn't work on fixture functions
 @pytest.fixture(params=["remote", "local", "cloned"])
-def url_dataset(data_files, data_server, request, tmp_home, tmp_path):  # noqa: U100
-    ds = Dataset(str(tmp_path / "ds")).create()
+def url_dataset(
+    data_files, data_server, request, tmp_home, tmp_path_factory  # noqa: U100
+):
+    workpath = tmp_path_factory.mktemp("url_dataset")
+    ds = Dataset(str(workpath / "ds")).create()
     for fname in data_files:
         if request.param == "remote":
             ds.repo.add_url_to_file(
@@ -104,7 +124,7 @@ def url_dataset(data_files, data_server, request, tmp_home, tmp_path):  # noqa: 
     if request.param == "cloned":
         ds.repo.call_git(["update-server-info"])
         with local_server(ds.path) as origin_url:
-            clone_ds = clone(origin_url, str(tmp_path / "clone"))
+            clone_ds = clone(origin_url, str(workpath / "clone"))
             for fname in data_files:
                 clone_ds.repo.rm_url(fname, f"{data_server}/{fname}")
             yield clone_ds
