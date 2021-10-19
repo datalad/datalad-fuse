@@ -34,4 +34,8 @@ jobs:
         cd __testhome__
         # give detailed info on actual test setup
         datalad wtf
-        tox -e py3
+        tox -e py3 -- --cov-report=xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        fail_ci_if_error: false
