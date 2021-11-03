@@ -1,10 +1,14 @@
 from contextlib import contextmanager
+from dataclasses import dataclass
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import logging
 import multiprocessing
 import os
+import os.path
 from pathlib import Path
+import re
 import time
+from typing import List
 
 from datalad.api import Dataset, clone
 import pytest
@@ -30,11 +34,6 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "libfuse" in item.keywords:
                 item.add_marker(skip_no_libfuse)
-
-
-@pytest.fixture(scope="session")
-def data_files():
-    return {p.name: p.read_bytes() for p in DATA_DIR.iterdir() if p.is_file()}
 
 
 @pytest.fixture()
@@ -91,42 +90,70 @@ def local_server(directory):
         p.terminate()
 
 
+@dataclass
+class DataFile:
+    url: str
+    path: str
+    content: bytes
+
+
 @pytest.fixture(scope="session")
-def data_server():
+def served_files():
     with local_server(DATA_DIR) as url:
-        yield url
+        files = []
+        for p in DATA_DIR.iterdir():
+            if p.is_file():
+                files.append(
+                    DataFile(
+                        url=f"{url}/{p.name}",
+                        path=p.name,
+                        content=p.read_bytes(),
+                    )
+                )
+        yield files
 
 
-# @pytest.mark.usefixtures("tmp_home")  # Doesn't work on fixture functions
-@pytest.fixture(params=["remote", "local", "cloned"])
-def url_dataset(
-    data_files, data_server, request, tmp_home, tmp_path_factory  # noqa: U100
-):
-    workpath = tmp_path_factory.mktemp("url_dataset")
-    ds = Dataset(str(workpath / "ds")).create()
-    for fname in data_files:
-        if request.param == "remote":
-            ds.repo.add_url_to_file(
-                fname, f"{data_server}/{fname}", options=["--relaxed"]
-            )
+def initdataset(ds, data_files: List[DataFile], is_remote: bool) -> None:
+    for dfile in data_files:
+        if is_remote:
+            ds.repo.add_url_to_file(dfile.path, dfile.url, options=["--relaxed"])
         else:
-            ds.download_url(urls=f"{data_server}/{fname}", path=fname)
+            ds.download_url(urls=dfile.url, path=dfile.path)
         # Add an invalid URL in order to test bad-URL-fallback.
         # Add it after `download_url()` is called in order to not cause an
         #  error on filesystems without symlinks (in which case doing
         #  `add_url_to_file()` would cause the file to be created as a
         #  non-symlink, which `download_url()` would then see as the file
         #  already being present, leading to an error).
-        # It appears that git annex returns files' URLs in lexicographic
-        #  order, so in order for the bad URL to be tried first, we insert
-        #  a '0'.
-        ds.repo.add_url_to_file(fname, f"{data_server}/0{fname}", options=["--relaxed"])
+        # It appears that git annex returns files' URLs in lexicographic order,
+        #  so in order for the bad URL to be tried first, we insert a '0' at
+        #  the start of the URL path.
+        ds.repo.add_url_to_file(
+            dfile.path, re.sub(r"(:\d+/)", r"\g<1>0", dfile.url), options=["--relaxed"]
+        )
+
+
+# @pytest.mark.usefixtures("tmp_home")  # Doesn't work on fixture functions
+@pytest.fixture(params=["remote", "local", "cloned"])
+def url_dataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U100
+    workpath = tmp_path_factory.mktemp("url_dataset")
+    ds = Dataset(workpath / "ds").create()
+    initdataset(ds, served_files, request.param == "remote")
     if request.param == "cloned":
         ds.repo.call_git(["update-server-info"])
         with local_server(ds.path) as origin_url:
-            clone_ds = clone(origin_url, str(workpath / "clone"))
-            for fname in data_files:
-                clone_ds.repo.rm_url(fname, f"{data_server}/{fname}")
-            yield clone_ds
+            clone_ds = clone(origin_url, workpath / "clone")
+            for dfile in served_files:
+                clone_ds.repo.rm_url(dfile.path, dfile.url)
+            yield (clone_ds, {df.path: df.content for df in served_files})
     else:
-        yield ds
+        yield (ds, {df.path: df.content for df in served_files})
+
+
+@pytest.fixture(params=["remote", "local"])
+def superdataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U100
+    dspath = tmp_path_factory.mktemp("superdataset")
+    ds = Dataset(dspath).create()
+    sub = ds.create(dspath / "sub")
+    initdataset(sub, served_files, request.param == "remote")
+    return (ds, {os.path.join("sub", df.path): df.content for df in served_files})

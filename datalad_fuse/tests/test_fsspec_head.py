@@ -10,9 +10,10 @@ def first_n_lines(blob, n):
     return b"".join(split_terminated(blob, b"\n", True)[:n])
 
 
-def test_get_default_lines_text(data_files, url_dataset):
+def test_get_default_lines_text(url_dataset):
+    ds, data_files = url_dataset
     assert_in_results(
-        url_dataset.fsspec_head("text.txt"),
+        ds.fsspec_head("text.txt"),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -21,9 +22,10 @@ def test_get_default_lines_text(data_files, url_dataset):
 
 
 @pytest.mark.parametrize("lines", [0, 4, 20])
-def test_get_lines_text(data_files, lines, url_dataset):
+def test_get_lines_text(lines, url_dataset):
+    ds, data_files = url_dataset
     assert_in_results(
-        url_dataset.fsspec_head("text.txt", lines=lines),
+        ds.fsspec_head("text.txt", lines=lines),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -31,9 +33,10 @@ def test_get_lines_text(data_files, lines, url_dataset):
     )
 
 
-def test_get_bytes_text(data_files, url_dataset):
+def test_get_bytes_text(url_dataset):
+    ds, data_files = url_dataset
     assert_in_results(
-        url_dataset.fsspec_head("text.txt", bytes=100),
+        ds.fsspec_head("text.txt", bytes=100),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -41,9 +44,10 @@ def test_get_bytes_text(data_files, url_dataset):
     )
 
 
-def test_get_lines_binary(data_files, url_dataset):
+def test_get_lines_binary(url_dataset):
+    ds, data_files = url_dataset
     assert_in_results(
-        url_dataset.fsspec_head("binary.png", lines=3),
+        ds.fsspec_head("binary.png", lines=3),
         action="fsspec-head",
         type="dataset",
         status="ok",
@@ -51,11 +55,68 @@ def test_get_lines_binary(data_files, url_dataset):
     )
 
 
-def test_get_bytes_binary(data_files, url_dataset):
+def test_get_bytes_binary(url_dataset):
+    ds, data_files = url_dataset
     assert_in_results(
-        url_dataset.fsspec_head("binary.png", bytes=100),
+        ds.fsspec_head("binary.png", bytes=100),
         action="fsspec-head",
         type="dataset",
         status="ok",
         data=data_files["binary.png"][:100],
+    )
+
+
+def test_subdataset_get_default_lines_text(superdataset):
+    ds, data_files = superdataset
+    assert_in_results(
+        ds.fsspec_head("sub/text.txt"),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=first_n_lines(data_files["sub/text.txt"], 10),
+    )
+
+
+@pytest.mark.parametrize("lines", [0, 4, 20])
+def test_subdataset_get_lines_text(lines, superdataset):
+    ds, data_files = superdataset
+    assert_in_results(
+        ds.fsspec_head("sub/text.txt", lines=lines),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=first_n_lines(data_files["sub/text.txt"], lines),
+    )
+
+
+def test_subdataset_get_bytes_text(superdataset):
+    ds, data_files = superdataset
+    assert_in_results(
+        ds.fsspec_head("sub/text.txt", bytes=100),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=data_files["sub/text.txt"][:100],
+    )
+
+
+def test_subdataset_get_lines_binary(superdataset):
+    ds, data_files = superdataset
+    assert_in_results(
+        ds.fsspec_head("sub/binary.png", lines=3),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=first_n_lines(data_files["sub/binary.png"], 3),
+    )
+
+
+def test_subdataset_get_bytes_binary(superdataset):
+    ds, data_files = superdataset
+    assert_in_results(
+        ds.fsspec_head("sub/binary.png", bytes=100),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=data_files["sub/binary.png"][:100],
     )
