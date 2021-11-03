@@ -19,6 +19,11 @@ DATA_DIR = Path(__file__).with_name("data")
 lgr = logging.getLogger("datalad_fuse.tests")
 
 
+@pytest.fixture(autouse=True)
+def capture_all_logs(caplog):
+    caplog.set_level(logging.DEBUG, logger="datalad_fuse")
+
+
 def pytest_addoption(parser) -> None:
     parser.addoption(
         "--libfuse",

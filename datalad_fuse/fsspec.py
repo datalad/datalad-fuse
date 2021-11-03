@@ -1,8 +1,10 @@
+from functools import lru_cache
 import logging
 from pathlib import Path
 from typing import IO, Iterator, Optional, Union
 
 from datalad.support.annexrepo import AnnexRepo
+from datalad.utils import get_dataset_root
 import fsspec
 from fsspec.implementations.cached import CachingFileSystem
 
@@ -11,7 +13,7 @@ lgr = logging.getLogger("datalad_fuse.fsspec")
 
 class FsspecAdapter:
     def __init__(self, path: Union[str, Path]) -> None:
-        self.annex = AnnexRepo(str(path))
+        self.root = Path(path)
         self.cache_dir = Path(path, ".git", "datalad", "cache", "fsspec")
         self.fs = CachingFileSystem(
             fs=fsspec.filesystem("http"),
@@ -24,8 +26,21 @@ class FsspecAdapter:
             # same_names=True
         )
 
-    def get_urls(self, filepath: Union[str, Path]) -> Iterator[str]:
-        whereis = self.annex.whereis(str(filepath), output="full")
+    @lru_cache(maxsize=128)
+    def get_dataset_path(self, path: Union[str, Path]) -> Path:
+        path = Path(self.root, path)
+        dspath = get_dataset_root(path)
+        if dspath is None:
+            raise ValueError(f"Path not under DataLad: {path}")
+        dspath = Path(dspath)
+        try:
+            dspath.relative_to(self.root)
+        except ValueError:
+            raise ValueError(f"Path not under root dataset: {path}")
+        return dspath
+
+    def get_urls(self, annex: AnnexRepo, filepath: Union[str, Path]) -> Iterator[str]:
+        whereis = annex.whereis(str(filepath), output="full")
         remote_uuids = []
         for ru, v in whereis.items():
             remote_uuids.append(ru)
@@ -33,15 +48,15 @@ class FsspecAdapter:
                 if is_http_url(u):
                     yield u
 
-        key = self.annex.get_file_key(filepath)
-        path_mixed = self.annex.call_annex_oneline(
+        key = annex.get_file_key(filepath)
+        path_mixed = annex.call_annex_oneline(
             [
                 "examinekey",
                 "--format=annex/objects/${hashdirmixed}${key}/${key}\\n",
                 key,
             ]
         )
-        path_lower = self.annex.call_annex_oneline(
+        path_lower = annex.call_annex_oneline(
             [
                 "examinekey",
                 "--format=annex/objects/${hashdirlower}${key}/${key}\\n",
@@ -50,14 +65,14 @@ class FsspecAdapter:
         )
 
         uuid2remote_url = {}
-        for r in self.annex.get_remotes():
-            ru = self.annex.config.get(f"remote.{r}.annex-uuid")
+        for r in annex.get_remotes():
+            ru = annex.config.get(f"remote.{r}.annex-uuid")
             if ru is None:
                 continue
-            remote_url = self.annex.config.get(f"remote.{r}.url")
+            remote_url = annex.config.get(f"remote.{r}.url")
             if remote_url is None:
                 continue
-            remote_url = self.annex.config.rewrite_url(remote_url)
+            remote_url = annex.config.rewrite_url(remote_url)
             uuid2remote_url[ru] = remote_url
 
         for ru in remote_uuids:
@@ -91,9 +106,12 @@ class FsspecAdapter:
             kwargs = {}
         else:
             kwargs = {"encoding": encoding, "errors": errors}
-        under_annex = self.annex.is_under_annex(filepath)
+        dspath = self.get_dataset_path(filepath)
+        annex = AnnexRepo(dspath)
+        relpath = str(Path(filepath).relative_to(dspath))
+        under_annex = annex.is_under_annex(relpath)
         if under_annex:
-            has_content = self.annex.file_has_content(filepath)
+            has_content = annex.file_has_content(relpath)
             lgr.debug(
                 "%s: under annex, %s content",
                 filepath,
@@ -104,7 +122,7 @@ class FsspecAdapter:
             lgr.debug("%s: not under annex", filepath)
         if under_annex and not has_content:
             lgr.debug("%s: opening via fsspec", filepath)
-            for url in self.get_urls(filepath):
+            for url in self.get_urls(annex, relpath):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", filepath, url)
                     return self.fs.open(url, mode, **kwargs)
