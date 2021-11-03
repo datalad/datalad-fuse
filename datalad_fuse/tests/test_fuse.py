@@ -38,6 +38,7 @@ def test_fuse_subdataset(tmp_path, superdataset):
     assert sorted(q.name for q in tmp_path.iterdir()) == [
         ".datalad",
         ".gitattributes",
+        ".gitmodules",
         "sub",
     ]
     assert (
