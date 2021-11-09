@@ -14,6 +14,7 @@ lgr = logging.getLogger("datalad_fuse.fsspec")
 class FsspecAdapter:
     def __init__(self, path: Union[str, Path]) -> None:
         self.root = Path(path)
+        self.annexes = {}
         self.cache_dir = Path(path, ".git", "datalad", "cache", "fsspec")
         self.fs = CachingFileSystem(
             fs=fsspec.filesystem("http"),
@@ -40,7 +41,7 @@ class FsspecAdapter:
         return dspath
 
     def get_urls(self, annex: AnnexRepo, filepath: Union[str, Path]) -> Iterator[str]:
-        whereis = annex.whereis(str(filepath), output="full")
+        whereis = annex.whereis(str(filepath), output="full", batch=True)
         remote_uuids = []
         for ru, v in whereis.items():
             remote_uuids.append(ru)
@@ -49,20 +50,16 @@ class FsspecAdapter:
                     yield u
 
         key = annex.get_file_key(filepath)
-        path_mixed = annex.call_annex_oneline(
-            [
-                "examinekey",
-                "--format=annex/objects/${hashdirmixed}${key}/${key}\\n",
-                key,
-            ]
-        )
-        path_lower = annex.call_annex_oneline(
-            [
-                "examinekey",
-                "--format=annex/objects/${hashdirlower}${key}/${key}\\n",
-                key,
-            ]
-        )
+        path_mixed = annex._batched.get(
+            "examinekey",
+            annex_options=["--format=annex/objects/${hashdirmixed}${key}/${key}\\n"],
+            path=annex.path,
+        )(key)
+        path_lower = annex._batched.get(
+            "examinekey",
+            annex_options=["--format=annex/objects/${hashdirlower}${key}/${key}\\n"],
+            path=annex.path,
+        )(key)
 
         uuid2remote_url = {}
         for r in annex.get_remotes():
@@ -107,7 +104,10 @@ class FsspecAdapter:
         else:
             kwargs = {"encoding": encoding, "errors": errors}
         dspath = self.get_dataset_path(filepath)
-        annex = AnnexRepo(dspath)
+        try:
+            annex = self.annexes[dspath]
+        except KeyError:
+            annex = self.annexes[dspath] = AnnexRepo(dspath)
         relpath = str(Path(filepath).relative_to(dspath))
         under_annex = annex.is_under_annex(relpath)
         if under_annex:
