@@ -49,7 +49,7 @@ class FsspecAdapter:
                 if is_http_url(u):
                     yield u
 
-        key = annex.get_file_key(filepath)
+        key = annex.get_file_key(filepath, batch=True)
         path_mixed = annex._batched.get(
             "examinekey",
             annex_options=["--format=annex/objects/${hashdirmixed}${key}/${key}\\n"],
@@ -109,9 +109,9 @@ class FsspecAdapter:
         except KeyError:
             annex = self.annexes[dspath] = AnnexRepo(dspath)
         relpath = str(Path(filepath).relative_to(dspath))
-        under_annex = annex.is_under_annex(relpath)
+        under_annex = annex.is_under_annex(relpath, batch=True)
         if under_annex:
-            has_content = annex.file_has_content(relpath)
+            has_content = annex.file_has_content(relpath, batch=True)
             lgr.debug(
                 "%s: under annex, %s content",
                 filepath,
