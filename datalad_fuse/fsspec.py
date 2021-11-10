@@ -1,7 +1,7 @@
 from functools import lru_cache
 import logging
 from pathlib import Path
-from typing import IO, Iterator, Optional, Union
+from typing import IO, Iterator, Optional, Tuple, Union
 
 from datalad.support.annexrepo import AnnexRepo
 from datalad.utils import get_dataset_root
@@ -39,6 +39,15 @@ class FsspecAdapter:
         except ValueError:
             raise ValueError(f"Path not under root dataset: {path}")
         return dspath
+
+    def annexize(self, filepath: Union[str, Path]) -> Tuple[AnnexRepo, str]:
+        dspath = self.get_dataset_path(filepath)
+        try:
+            annex = self.annexes[dspath]
+        except KeyError:
+            annex = self.annexes[dspath] = AnnexRepo(dspath)
+        relpath = str(Path(filepath).relative_to(dspath))
+        return annex, relpath
 
     def get_urls(self, annex: AnnexRepo, filepath: Union[str, Path]) -> Iterator[str]:
         whereis = annex.whereis(str(filepath), output="full", batch=True)
@@ -103,12 +112,7 @@ class FsspecAdapter:
             kwargs = {}
         else:
             kwargs = {"encoding": encoding, "errors": errors}
-        dspath = self.get_dataset_path(filepath)
-        try:
-            annex = self.annexes[dspath]
-        except KeyError:
-            annex = self.annexes[dspath] = AnnexRepo(dspath)
-        relpath = str(Path(filepath).relative_to(dspath))
+        annex, relpath = self.annexize(filepath)
         under_annex = annex.is_under_annex(relpath, batch=True)
         if under_annex:
             has_content = annex.file_has_content(relpath, batch=True)
@@ -137,6 +141,10 @@ class FsspecAdapter:
 
     def clear(self) -> None:
         self.fs.clear_cache()
+
+    def is_under_annex(self, filepath: Union[str, Path]) -> bool:
+        annex, relpath = self.annexize(filepath)
+        return annex.is_under_annex(relpath, batch=True)
 
 
 def is_http_url(s):
