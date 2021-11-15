@@ -68,14 +68,14 @@ class FsspecHead(Interface):
             raise ValueError("'lines' and 'bytes' are mutually exclusive")
         elif lines is None and bytes is None:
             lines = DEFAULT_LINES
-        fsa = FsspecAdapter(ds.path)
-        if not os.path.isabs(path):
-            path = os.path.join(ds.path, path)
-        with fsa.open(path) as fp:
-            if lines is not None:
-                blob = b"".join(islice(fp, lines))
-            else:
-                blob = fp.read(bytes)
+        with FsspecAdapter(ds.path) as fsa:
+            if not os.path.isabs(path):
+                path = os.path.join(ds.path, path)
+            with fsa.open(path) as fp:
+                if lines is not None:
+                    blob = b"".join(islice(fp, lines))
+                else:
+                    blob = fp.read(bytes)
         yield get_status_dict(action="fsspec-head", ds=ds, status="ok", data=blob)
 
     @staticmethod

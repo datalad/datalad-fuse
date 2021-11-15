@@ -27,6 +27,14 @@ class FsspecAdapter:
             # same_names=True
         )
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_val, _exc_tb):
+        for annex in self.annexes.values():
+            annex._batched.clear()
+        self.annexes.clear()
+
     @lru_cache(maxsize=128)
     def get_dataset_path(self, path: Union[str, Path]) -> Path:
         path = Path(self.root, path)
