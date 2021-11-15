@@ -2,6 +2,7 @@ from enum import Enum
 from functools import lru_cache
 import logging
 import os
+import os.path
 from pathlib import Path
 from typing import IO, Iterator, Optional, Tuple, Union
 
@@ -10,7 +11,7 @@ from datalad.utils import get_dataset_root
 import fsspec
 from fsspec.implementations.cached import CachingFileSystem
 
-lgr = logging.getLogger("datalad_fuse.fsspec")
+lgr = logging.getLogger("datalad.fuse.fsspec")
 
 FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 
@@ -67,7 +68,7 @@ class FsspecAdapter:
                     else:
                         return (FileState.NO_CONTENT, key)
             return (FileState.NOT_ANNEXED, None)
-        target = p.parent / os.readlink(p)
+        target = Path(os.path.normpath(p.parent / os.readlink(p)))
         try:
             target.relative_to(dataset_path / ".git" / "annex" / "objects")
         except ValueError:
