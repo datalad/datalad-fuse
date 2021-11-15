@@ -58,6 +58,14 @@ class FsspecAdapter:
     ) -> Tuple[FileState, Optional[str]]:
         p = dataset_path / relpath
         if not p.is_symlink():
+            if p.stat().st_size < 1024:
+                annex = self.annexes[dataset_path]
+                if annex.is_under_annex(relpath, batch=True):
+                    key = annex.get_file_key(relpath, batch=True)
+                    if annex.file_has_content(relpath, batch=True):
+                        return (FileState.HAS_CONTENT, key)
+                    else:
+                        return (FileState.NO_CONTENT, key)
             return (FileState.NOT_ANNEXED, None)
         target = p.parent / os.readlink(p)
         try:
