@@ -1,5 +1,7 @@
+from enum import Enum
 from functools import lru_cache
 import logging
+import os
 from pathlib import Path
 from typing import IO, Iterator, Optional, Tuple, Union
 
@@ -9,6 +11,8 @@ import fsspec
 from fsspec.implementations.cached import CachingFileSystem
 
 lgr = logging.getLogger("datalad_fuse.fsspec")
+
+FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 
 
 class FsspecAdapter:
@@ -48,6 +52,24 @@ class FsspecAdapter:
             raise ValueError(f"Path not under root dataset: {path}")
         return dspath
 
+    @lru_cache(maxsize=128)
+    def get_file_state(
+        self, dataset_path: Path, relpath: str
+    ) -> Tuple[FileState, Optional[str]]:
+        p = dataset_path / relpath
+        if not p.is_symlink():
+            return (FileState.NOT_ANNEXED, None)
+        target = p.parent / os.readlink(p)
+        try:
+            target.relative_to(dataset_path / ".git" / "annex" / "objects")
+        except ValueError:
+            return (FileState.NOT_ANNEXED, None)
+        key = target.name
+        if target.exists():
+            return (FileState.HAS_CONTENT, key)
+        else:
+            return (FileState.NO_CONTENT, key)
+
     def annexize(self, filepath: Union[str, Path]) -> Tuple[AnnexRepo, str]:
         dspath = self.get_dataset_path(filepath)
         try:
@@ -57,7 +79,9 @@ class FsspecAdapter:
         relpath = str(Path(filepath).relative_to(dspath))
         return annex, relpath
 
-    def get_urls(self, annex: AnnexRepo, filepath: Union[str, Path]) -> Iterator[str]:
+    def get_urls(
+        self, annex: AnnexRepo, filepath: Union[str, Path], key: str
+    ) -> Iterator[str]:
         whereis = annex.whereis(str(filepath), output="full", batch=True)
         remote_uuids = []
         for ru, v in whereis.items():
@@ -66,7 +90,6 @@ class FsspecAdapter:
                 if is_http_url(u):
                     yield u
 
-        key = annex.get_file_key(filepath, batch=True)
         path_mixed = annex._batched.get(
             "examinekey",
             annex_options=["--format=annex/objects/${hashdirmixed}${key}/${key}\\n"],
@@ -121,20 +144,20 @@ class FsspecAdapter:
         else:
             kwargs = {"encoding": encoding, "errors": errors}
         annex, relpath = self.annexize(filepath)
-        under_annex = annex.is_under_annex(relpath, batch=True)
-        if under_annex:
-            has_content = annex.file_has_content(relpath, batch=True)
+        fstate, key = self.get_file_state(annex.pathobj, relpath)
+        if fstate is FileState.NOT_ANNEXED:
+            has_content = False
+            lgr.debug("%s: not under annex", filepath)
+        else:
+            has_content = fstate is FileState.HAS_CONTENT
             lgr.debug(
                 "%s: under annex, %s content",
                 filepath,
                 "has" if has_content else "does not have",
             )
-        else:
-            has_content = False
-            lgr.debug("%s: not under annex", filepath)
-        if under_annex and not has_content:
+        if fstate is FileState.NO_CONTENT:
             lgr.debug("%s: opening via fsspec", filepath)
-            for url in self.get_urls(annex, relpath):
+            for url in self.get_urls(annex, relpath, key):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", filepath, url)
                     return self.fs.open(url, mode, **kwargs)
@@ -152,8 +175,9 @@ class FsspecAdapter:
 
     def is_under_annex(self, filepath: Union[str, Path]) -> bool:
         annex, relpath = self.annexize(filepath)
-        return annex.is_under_annex(relpath, batch=True)
+        fstate, _ = self.get_file_state(annex.pathobj, relpath)
+        return fstate is not FileState.NOT_ANNEXED
 
 
-def is_http_url(s):
+def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
