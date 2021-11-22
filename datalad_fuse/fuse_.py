@@ -3,11 +3,11 @@ import io
 import logging
 import os
 import os.path as op
+from pathlib import Path
 import stat
 from threading import Lock
 import time
 
-from datalad.support.annexrepo import AnnexRepo
 from fuse import FuseOSError, Operations
 
 from .fsspec import FsspecAdapter
@@ -46,7 +46,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def __call__(self, op, path, *args):
         lgr.debug("op=%s for path=%s with args %s", op, path, args)
-        if path == "/.git" or path.startswith("/.git/"):
+        if ".git" in Path(path).parts:
             lgr.debug("Raising ENOENT for .git")
             raise FuseOSError(ENOENT)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
@@ -160,13 +160,12 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def readdir(self, path, _fh):
         lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
         paths = [".", ".."] + os.listdir(path)
-        if path == self.root + "/":
-            try:
-                paths.remove(".git")
-            except ValueError:
-                pass
-            else:
-                lgr.debug("Removed .git from dirlist")
+        try:
+            paths.remove(".git")
+        except ValueError:
+            pass
+        else:
+            lgr.debug("Removed .git from dirlist")
         return paths
 
     def release(self, path, fh):
@@ -189,7 +188,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def readlink(self, path):
         lgr.debug("readlink(path=%r)", path)
         linked_path = os.readlink(path)
-        if AnnexRepo(self.root).is_under_annex(path):
+        if self._adapter.is_under_annex(path):
             # TODO: we need all leading dirs to exist
             linked_path_full = op.join(op.dirname(path), linked_path)
             linked_path_dir = op.dirname(linked_path_full)
