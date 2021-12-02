@@ -77,7 +77,7 @@ class FuseFS(Interface):
         "foreground": Parameter(
             args=("-f", "--foreground"),
             action="store_true",
-            doc="""Run process in foreground."""
+            doc="""Run process in foreground [required].""",
         )
         # TODO: (might better become config vars?)
         # --cache=persist
@@ -89,9 +89,16 @@ class FuseFS(Interface):
     @datasetmethod(name="fusefs")
     @eval_results
     def __call__(
-        mount_path: str, dataset: Optional[Dataset] = None,
-        foreground: bool = False
+        mount_path: str, dataset: Optional[Dataset] = None, foreground: bool = False
     ) -> Iterator[Dict[str, Any]]:
+        if not foreground:
+            yield get_status_dict(
+                action="fusefs",
+                path=mount_path,
+                status="error",
+                message="fusefs does not work properly without --foreground",
+            )
+            return
         ds = require_dataset(
             dataset, purpose="mount as FUSE system", check_installed=True
         )
