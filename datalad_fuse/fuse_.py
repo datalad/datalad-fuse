@@ -11,6 +11,7 @@ import time
 
 from fuse import FuseOSError, Operations
 
+from .consts import CACHE_SIZE
 from .fsspec import FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
@@ -79,7 +80,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             )
         )
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=CACHE_SIZE)
     def getattr(self, path, fh=None):
         # TODO: support of unlocked files... but at what cost?
         lgr.debug("getattr(path=%r, fh=%r)", path, fh)
