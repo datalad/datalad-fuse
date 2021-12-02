@@ -38,7 +38,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         self.root = op.realpath(root)
         self.rwlock = Lock()
         self._adapter = FsspecAdapter(root)
-        self._cache = {}
+        self._fhdict = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
         # and there is no seek so we should be ok even if the same file open
         # multiple times?
@@ -52,13 +52,13 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
     def destroy(self, _path=None):
-        lgr.warning("Destroying fsspecs and cache of %d fhs", len(self._cache))
-        for f in self._cache.values():
+        lgr.warning("Destroying fsspecs and collection of %d fhs", len(self._fhdict))
+        for f in self._fhdict.values():
             try:
                 f.close()
             except Exception as e:
                 lgr.error("%s", e)
-        self._cache = {}
+        self._fhdict = {}
         return 0
 
     @staticmethod
@@ -89,11 +89,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             r = self._filter_stat(os.stat(path))
         else:
             if fh and fh >= self._counter_offset:
-                lgr.debug("File in cache")
-                fsspec_file = self._cache[fh]
+                lgr.debug("File already open")
+                fsspec_file = self._fhdict[fh]
                 to_close = False
             else:
-                lgr.debug("File not in cache")
+                lgr.debug("File not already open")
                 fsspec_file = self._adapter.open(path)
                 to_close = True
             if fsspec_file:
@@ -138,7 +138,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             fsspec_file = self._adapter.open(path)
             lgr.debug("Counter = %d", self._counter)
             # TODO: threadlock ?
-            self._cache[self._counter] = fsspec_file  # self.fs.open(fn, mode)
+            self._fhdict[self._counter] = fsspec_file  # self.fs.open(fn, mode)
             self._counter += 1
             return self._counter - 1
 
@@ -150,10 +150,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 os.lseek(fh, offset, 0)
                 return os.read(fh, size)
         else:
-            lgr.debug("Reading from cache")
+            lgr.debug("Reading from open filehandle")
             # must be open already and we must have mapped it to fsspec file
             # TODO: check for path to correspond?
-            f = self._cache[fh]
+            f = self._fhdict[fh]
             f.seek(offset)
             return f.read(size)
 
@@ -173,12 +173,12 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         if fh < self._counter_offset:
             lgr.debug("Closing directly")
             os.close(fh)
-        elif fh in self._cache:
-            lgr.debug("Popping from cache")
-            f = self._cache.pop(fh)
+        elif fh in self._fhdict:
+            lgr.debug("Popping from filehandle collection")
+            f = self._fhdict.pop(fh)
             # but we do not close an fsspec instance, so it could be reused
             # on subsequent accesses
-            # TODO: this .close is not sufficient -- cache is breeding open
+            # TODO: this .close is not sufficient -- _fhdict is breeding open
             #  files, so we need to provide some proper use of lru_cache
             #  to have not recently used closed
             if not f.closed:
