@@ -1,4 +1,5 @@
 from errno import ENOENT, EROFS
+from functools import lru_cache
 import io
 import logging
 import os
@@ -78,6 +79,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             )
         )
 
+    @lru_cache(maxsize=128)
     def getattr(self, path, fh=None):
         # TODO: support of unlocked files... but at what cost?
         lgr.debug("getattr(path=%r, fh=%r)", path, fh)
