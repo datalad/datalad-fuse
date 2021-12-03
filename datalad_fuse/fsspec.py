@@ -11,6 +11,8 @@ from datalad.utils import get_dataset_root
 import fsspec
 from fsspec.implementations.cached import CachingFileSystem
 
+from .consts import CACHE_SIZE
+
 lgr = logging.getLogger("datalad.fuse.fsspec")
 
 FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
@@ -40,7 +42,7 @@ class FsspecAdapter:
             annex._batched.clear()
         self.annexes.clear()
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=CACHE_SIZE)
     def get_dataset_path(self, path: Union[str, Path]) -> Path:
         path = Path(self.root, path)
         dspath = get_dataset_root(path)
@@ -53,7 +55,7 @@ class FsspecAdapter:
             raise ValueError(f"Path not under root dataset: {path}")
         return dspath
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=CACHE_SIZE)
     def get_file_state(
         self, dataset_path: Path, relpath: str
     ) -> Tuple[FileState, Optional[str]]:
