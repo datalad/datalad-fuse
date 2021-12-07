@@ -12,7 +12,7 @@ from datalad.interface.utils import eval_results
 from datalad.support.constraints import EnsureNone
 from datalad.support.param import Parameter
 
-from .fsspec import FsspecAdapter
+from .fsspec import DatasetAdapter
 
 
 @build_doc
@@ -29,14 +29,31 @@ class FsspecCacheClear(Interface):
             working directory.""",
             constraints=EnsureDataset() | EnsureNone(),
         ),
+        "recursive": Parameter(
+            args=("-r", "--recursive"),
+            action="store_true",
+            doc="Clear caches of subdatasets as well",
+        ),
     }
 
     @staticmethod
     @datasetmethod(name="fsspec_cache_clear")
     @eval_results
-    def __call__(dataset: Optional[Dataset] = None) -> Iterator[Dict[str, Any]]:
+    def __call__(
+        dataset: Optional[Dataset] = None, recursive: bool = False
+    ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(
             dataset, purpose="clear fsspec cache", check_installed=True
         )
-        FsspecAdapter(ds.path).clear()
+        DatasetAdapter(ds.path).clear()
         yield get_status_dict(action="fsspec-cache-clear", ds=ds, status="ok")
+        if recursive:
+            for subds in ds.subdatasets(recursive=True):
+                DatasetAdapter(subds["path"]).clear()
+                yield get_status_dict(
+                    action="fsspec-cache-clear",
+                    refds=ds.path,
+                    ds=Dataset(subds["path"]),
+                    parentds=subds["parentds"],
+                    status="ok",
+                )

@@ -199,10 +199,6 @@ class FsspecAdapter:
         )
         return dsap.open(relpath, mode=mode, encoding=encoding, errors=errors)
 
-    def clear(self) -> None:
-        ### TODO: Update
-        self.fs.clear_cache()
-
     def is_under_annex(self, filepath: Union[str, Path]) -> bool:
         dsap, relpath = self.resolve_dataset(filepath)
         fstate, _ = dsap.get_file_state(relpath)
