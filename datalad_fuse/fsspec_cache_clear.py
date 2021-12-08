@@ -48,7 +48,7 @@ class FsspecCacheClear(Interface):
         DatasetAdapter(ds.path).clear()
         yield get_status_dict(action="fsspec-cache-clear", ds=ds, status="ok")
         if recursive:
-            for subds in ds.subdatasets(recursive=True, fulfilled=True):
+            for subds in ds.subdatasets(recursive=True, fulfilled=True, result_renderer='disabled'):
                 DatasetAdapter(subds["path"]).clear()
                 yield get_status_dict(
                     action="fsspec-cache-clear",
