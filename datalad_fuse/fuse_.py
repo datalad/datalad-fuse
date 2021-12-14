@@ -14,7 +14,7 @@ from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 
 from .consts import CACHE_SIZE
-from .fsspec import DatasetAdapter, FsspecAdapter
+from .fsspec import FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
@@ -68,12 +68,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             for dsap in self._adapter.datasets.values():
                 dsap.clear()
         elif cache_clear == "recursive":
-            ds = Dataset(self.root)
-            DatasetAdapter(ds.path).clear()
-            for subds in ds.subdatasets(
-                recursive=True, fulfilled=True, result_renderer="disabled"
-            ):
-                DatasetAdapter(subds["path"]).clear()
+            Dataset(self.root).fsspec_cache_clear(recursive=True)
         return 0
 
     @staticmethod
