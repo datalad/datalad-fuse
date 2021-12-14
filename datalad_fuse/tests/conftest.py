@@ -57,6 +57,7 @@ def tmp_home(monkeypatch, tmp_path_factory):
         "name = Test User\n"
         "email = test@test.nil\n"
     )
+    return home
 
 
 def serve_path_via_http(hostname, path, queue):

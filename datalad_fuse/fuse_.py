@@ -9,6 +9,8 @@ import stat
 from threading import Lock
 import time
 
+from datalad import cfg
+from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 
 from .consts import CACHE_SIZE
@@ -61,6 +63,12 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             except Exception as e:
                 lgr.error("%s", e)
         self._fhdict = {}
+        cache_clear = cfg.get("datalad.fusefs.cache-clear")
+        if cache_clear == "visited":
+            for dsap in self._adapter.datasets.values():
+                dsap.clear()
+        elif cache_clear == "recursive":
+            Dataset(self.root).fsspec_cache_clear(recursive=True)
         return 0
 
     @staticmethod
