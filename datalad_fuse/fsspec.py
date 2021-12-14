@@ -6,6 +6,7 @@ import os.path
 from pathlib import Path
 from typing import IO, Dict, Iterator, Optional, Tuple, Union
 
+from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
 from datalad.utils import get_dataset_root
 import fsspec
@@ -21,7 +22,12 @@ FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 class DatasetAdapter:
     def __init__(self, path: Union[str, Path]) -> None:
         self.path = Path(path)
-        self.annex = AnnexRepo(path)
+        ds = Dataset(path)
+        self.annex: Optional[AnnexRepo]
+        if isinstance(ds.repo, AnnexRepo):
+            self.annex = ds.repo
+        else:
+            self.annex = None
         self.fs = CachingFileSystem(
             fs=fsspec.filesystem("http"),
             # target_protocol='blockcache',
@@ -34,13 +40,14 @@ class DatasetAdapter:
         )
 
     def close(self) -> None:
-        self.annex._batched.clear()
+        if self.annex is not None:
+            self.annex._batched.clear()
 
     @lru_cache(maxsize=CACHE_SIZE)
     def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[str]]:
         p = self.path / relpath
         if not p.is_symlink():
-            if p.stat().st_size < 1024:
+            if p.stat().st_size < 1024 and self.annex is not None:
                 if self.annex.is_under_annex(relpath, batch=True):
                     key = self.annex.get_file_key(relpath, batch=True)
                     if self.annex.file_has_content(relpath, batch=True):
@@ -60,6 +67,7 @@ class DatasetAdapter:
             return (FileState.NO_CONTENT, key)
 
     def get_urls(self, filepath: Union[str, Path], key: str) -> Iterator[str]:
+        assert self.annex is not None
         whereis = self.annex.whereis(str(filepath), output="full", batch=True)
         remote_uuids = []
         for ru, v in whereis.items():
@@ -123,14 +131,12 @@ class DatasetAdapter:
             kwargs = {"encoding": encoding, "errors": errors}
         fstate, key = self.get_file_state(relpath)
         if fstate is FileState.NOT_ANNEXED:
-            has_content = False
             lgr.debug("%s: not under annex", relpath)
         else:
-            has_content = fstate is FileState.HAS_CONTENT
             lgr.debug(
                 "%s: under annex, %s content",
                 relpath,
-                "has" if has_content else "does not have",
+                "has" if fstate is FileState.HAS_CONTENT else "does not have",
             )
         if fstate is FileState.NO_CONTENT:
             lgr.debug("%s: opening via fsspec", relpath)

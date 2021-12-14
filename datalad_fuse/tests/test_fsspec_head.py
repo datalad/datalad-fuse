@@ -1,3 +1,7 @@
+from pathlib import Path
+import subprocess
+
+from datalad.api import Dataset
 from datalad.tests.utils import assert_in_results
 from linesep import split_terminated
 import pytest
@@ -119,4 +123,20 @@ def test_subdataset_get_bytes_binary(superdataset):
         type="dataset",
         status="ok",
         data=data_files["sub/binary.png"][:100],
+    )
+
+
+def test_git_repo(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    TEXT = (Path(__file__).with_name("data") / "text.txt").read_bytes()
+    (tmp_path / "text.txt").write_bytes(TEXT)
+    subprocess.run(["git", "add", "text.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "Add a file"], cwd=tmp_path, check=True)
+    ds = Dataset(tmp_path)
+    assert_in_results(
+        ds.fsspec_head("text.txt"),
+        action="fsspec-head",
+        type="dataset",
+        status="ok",
+        data=first_n_lines(TEXT, 10),
     )
