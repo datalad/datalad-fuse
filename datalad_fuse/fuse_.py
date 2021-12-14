@@ -9,10 +9,12 @@ import stat
 from threading import Lock
 import time
 
+from datalad import cfg
+from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 
 from .consts import CACHE_SIZE
-from .fsspec import FsspecAdapter
+from .fsspec import DatasetAdapter, FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
@@ -61,6 +63,17 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             except Exception as e:
                 lgr.error("%s", e)
         self._fhdict = {}
+        cache_clear = cfg.get("datalad.fusefs.cache-clear")
+        if cache_clear == "visited":
+            for dsap in self._adapter.datasets.values():
+                dsap.clear()
+        elif cache_clear == "recursive":
+            ds = Dataset(self.root)
+            DatasetAdapter(ds.path).clear()
+            for subds in ds.subdatasets(
+                recursive=True, fulfilled=True, result_renderer="disabled"
+            ):
+                DatasetAdapter(subds["path"]).clear()
         return 0
 
     @staticmethod
