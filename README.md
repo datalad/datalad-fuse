@@ -66,5 +66,5 @@ will have their caches cleared; if it is instead set to "`recursive`", then all
   If no dataset is given, an attempt is made to identify the dataset based on
   the current working directory.
 
-- `-f`, `--foreground` — Run the FUSE process in the foreground; use Cntrl-C to
+- `-f`, `--foreground` — Run the FUSE process in the foreground; use Ctrl-C to
   exit.  This option is currently required.
