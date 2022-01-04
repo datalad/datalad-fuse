@@ -4,7 +4,9 @@
 
 `datalad-fuse` provides commands for reading files in a
 [DataLad](http://datalad.org) dataset from their remote web URLs without having
-to download them in their entirety first.
+to download them in their entirety first.  Instead,
+[fsspec](http://github.com/fsspec/filesystem_spec) is used to sparsely download
+and locally cache the files as needed.
 
 ## Installation
 
