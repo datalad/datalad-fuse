@@ -2,16 +2,16 @@
 
 [![Build status](https://ci.appveyor.com/api/projects/status/g9von5wtpoidcecy/branch/master?svg=true)](https://ci.appveyor.com/project/mih/datalad-extension-template/branch/master) [![codecov.io](https://codecov.io/github/datalad/datalad-fuse/coverage.svg?branch=master)](https://codecov.io/github/datalad/datalad-fuse?branch=master) [![tests](https://github.com/datalad/datalad-fuse/workflows/Test/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3ATest) [![docs](https://github.com/datalad/datalad-fuse/workflows/docs/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3Adocs)
 
-`datalad_fuse` provides commands for reading files in a
+`datalad-fuse` provides commands for reading files in a
 [DataLad](http://datalad.org) dataset from their remote web URLs without having
 to download them in their entirety first.
 
 ## Installation
 
-`datalad_fuse` requires Python 3.6 or higher.  Just use
+`datalad-fuse` requires Python 3.6 or higher.  Just use
 [pip](https://pip.pypa.io) for Python 3 (You have pip, right?) to install it:
 
-    python3 -m pip install datalad_fuse
+    python3 -m pip install datalad-fuse
 
 In addition, use of the `datalad fusefs` command requires FUSE to be installed;
 on Debian-based systems, this can be done with:
