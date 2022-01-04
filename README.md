@@ -1,48 +1,72 @@
-# DataLad extension template
+# DataLad FUSE extension package
 
-[![Build status](https://ci.appveyor.com/api/projects/status/g9von5wtpoidcecy/branch/master?svg=true)](https://ci.appveyor.com/project/mih/datalad-extension-template/branch/master) [![codecov.io](https://codecov.io/github/datalad/datalad-extension-template/coverage.svg?branch=master)](https://codecov.io/github/datalad/datalad-extension-template?branch=master) [![crippled-filesystems](https://github.com/datalad/datalad-extension-template/workflows/crippled-filesystems/badge.svg)](https://github.com/datalad/datalad-extension-template/actions?query=workflow%3Acrippled-filesystems) [![docs](https://github.com/datalad/datalad-extension-template/workflows/docs/badge.svg)](https://github.com/datalad/datalad-extension-template/actions?query=workflow%3Adocs)
+[![Build status](https://ci.appveyor.com/api/projects/status/g9von5wtpoidcecy/branch/master?svg=true)](https://ci.appveyor.com/project/mih/datalad-extension-template/branch/master) [![codecov.io](https://codecov.io/github/datalad/datalad-fuse/coverage.svg?branch=master)](https://codecov.io/github/datalad/datalad-fuse?branch=master) [![tests](https://github.com/datalad/datalad-fuse/workflows/Test/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3ATest) [![docs](https://github.com/datalad/datalad-fuse/workflows/docs/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3Adocs)
 
+`datalad-fuse` provides commands for reading files in a
+[DataLad](http://datalad.org) dataset from their remote web URLs without having
+to download them in their entirety first.  Instead,
+[fsspec](http://github.com/fsspec/filesystem_spec) is used to sparsely download
+and locally cache the files as needed.
 
-This repository contains an extension template that can serve as a starting point
-for implementing a [DataLad](http://datalad.org) extension. An extension can
-provide any number of additional DataLad commands that are automatically
-included in DataLad's command line and Python API.
+## Installation
 
-For a demo, clone this repository and install the demo extension via
+`datalad-fuse` requires Python 3.6 or higher.  Just use
+[pip](https://pip.pypa.io) for Python 3 (You have pip, right?) to install it:
 
-    pip install -e .
+    python3 -m pip install datalad-fuse
 
-DataLad will now expose a new command suite with a `hello...` command.
+In addition, use of the `datalad fusefs` command requires FUSE to be installed;
+on Debian-based systems, this can be done with:
 
-    % datalad --help |grep -B2 -A2 hello
-    *Demo DataLad command suite*
+    sudo apt-get install fuse
 
-      hello-cmd
-          Short description of the command
+## Commands
 
-To start implementing your own extension, [use this
-template](https://github.com/datalad/datalad-extension-template/generate), and
-adjust as necessary. A good approach is to
+### `datalad fsspec-cache-clear [<options>]`
 
-- Pick a name for the new extension.
-- Look through the sources and replace `datalad_fuse` with
-  `datalad_<newname>` (hint: `git grep datalad_fuse` should find all
-  spots).
-- Delete the example command implementation in `datalad_fuse/__init__.py`
-  by (re)moving the `HelloWorld` class.
-- Implement a new command, and adjust the `command_suite` in
-  `datalad_fuse/__init__.py` to point to it.
-- Replace `hello_cmd` with the name of the new command in
-  `datalad_fuse/tests/test_register.py` to automatically test whether the
-  new extension installs correctly.
-- Adjust the documentation in `docs/source/index.rst`.
-- Replace this README.
-- Update `setup.cfg` with appropriate metadata on the new extension.
+Clears the local download cache for a dataset.
 
-You can consider filling in the provided [.zenodo.json](.zenodo.json) file with
-contributor information and [meta data](https://developers.zenodo.org/#representation)
-to acknowledge contributors and describe the publication record that is created when
-[you make your code citeable](https://guides.github.com/activities/citable-code/)
-by archiving it using [zenodo.org](https://zenodo.org/). You may also want to
-consider acknowledging contributors with the
-[allcontributors bot](https://allcontributors.org/docs/en/bot/overview).
+#### Options
+
+- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
+  If no dataset is given, an attempt is made to identify the dataset based on
+  the current working directory.
+
+- `-r`, `--recursive` — Clear the caches of subdatasets as well.
+
+### `datalad fsspec-head [<options>] <path>`
+
+Shows leading lines/bytes of an annexed file by fetching its data from a remote
+URL.
+
+#### Options
+
+- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
+  If no dataset is given, an attempt is made to identify the dataset based on
+  the current working directory.
+
+- `-n <INT>`, `--lines <INT>` — How many lines to show (default: 10)
+
+- `-c <INT>`, `--bytes <INT>` — How many bytes to show
+
+### `datalad fusefs [<options>] <mount-path>`
+
+Create a read-only FUSE mount at `<mount-path>` that exposes the files in the
+given dataset.  Opening a file under the mount that is not locally present in
+the dataset will cause its contents to be downloaded from the file's web URL as
+needed.
+
+When the command finishes, `fsspec-cache-clear` may be run depending on the
+value of the `datalad.fusefs.cache-clear` configuration option.  If it is set
+to "`visited`", then any (sub)datasets that were accessed in the FUSE mount
+will have their caches cleared; if it is instead set to "`recursive`", then all
+(sub)datasets in the dataset being operated on will have their caches cleared.
+
+#### Options
+
+- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
+  If no dataset is given, an attempt is made to identify the dataset based on
+  the current working directory.
+
+- `-f`, `--foreground` — Run the FUSE process in the foreground; use Ctrl-C to
+  exit.  This option is currently required.

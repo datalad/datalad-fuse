@@ -24,7 +24,7 @@ SETUP_REQUIRES += ["wheel"] if "bdist_wheel" in sys.argv else []
 
 if __name__ == "__main__":
     setup(
-        name="datalad_fuse",
+        name="datalad-fuse",
         version=versioneer.get_version(),
         cmdclass=cmdclass,
         setup_requires=SETUP_REQUIRES,
