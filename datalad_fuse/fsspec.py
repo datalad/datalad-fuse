@@ -10,6 +10,7 @@ from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
 from datalad.utils import get_dataset_root
 import fsspec
+from fsspec.exceptions import BlocksizeMismatchError
 from fsspec.implementations.cached import CachingFileSystem
 
 from .consts import CACHE_SIZE
@@ -143,6 +144,15 @@ class DatasetAdapter:
             for url in self.get_urls(relpath, key):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", relpath, url)
+                    return self.fs.open(url, mode, **kwargs)
+                except BlocksizeMismatchError as e:
+                    lgr.warning(
+                        "%s: Blocksize mismatch: %s; deleting cached file and"
+                        " re-opening",
+                        relpath,
+                        e,
+                    )
+                    self.fs.pop_from_cache(url)
                     return self.fs.open(url, mode, **kwargs)
                 except FileNotFoundError as e:
                     lgr.debug(
