@@ -47,6 +47,20 @@ class DatasetAdapter:
     @lru_cache(maxsize=CACHE_SIZE)
     def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[str]]:
         p = self.path / relpath
+        lgr.debug("get_file_state: %s", relpath)
+
+        # Shortcut handling of content under .git, in particular - annex key paths
+        if relpath.startswith('.git/'):
+            # TODO: 6 is hardcoded but AFAIK and unfortunately annex does not support
+            # any layout which would have some other number of directories there. Nevertheless
+            # we might want to avoid relying on hardcoding 6 here?!
+            if relpath.startswith('.git/annex/objects/') and relpath.count('/') == 6:
+                if p.exists():
+                    return (FileState.HAS_CONTENT, p.name)
+                else:
+                    return (FileState.NO_CONTENT, p.name)
+            return (FileState.NOT_ANNEXED, None)
+
         if not p.is_symlink():
             if p.stat().st_size < 1024 and self.annex is not None:
                 if self.annex.is_under_annex(relpath, batch=True):
@@ -67,9 +81,12 @@ class DatasetAdapter:
         else:
             return (FileState.NO_CONTENT, key)
 
-    def get_urls(self, filepath: Union[str, Path], key: str) -> Iterator[str]:
+    def get_urls(self, key: str) -> Iterator[str]:
         assert self.annex is not None
-        whereis = self.annex.whereis(str(filepath), output="full", batch=True)
+        # TODO: switch to batch=True whenever
+        # https://github.com/datalad/datalad/pull/6379 is merged/released.
+        # Will need a recent git-annex to work!
+        whereis = self.annex.whereis(key, output="full", batch=False, key=True)
         remote_uuids = []
         for ru, v in whereis.items():
             remote_uuids.append(ru)
@@ -141,7 +158,7 @@ class DatasetAdapter:
             )
         if fstate is FileState.NO_CONTENT:
             lgr.debug("%s: opening via fsspec", relpath)
-            for url in self.get_urls(relpath, key):
+            for url in self.get_urls(key):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", relpath, url)
                     return self.fs.open(url, mode, **kwargs)
@@ -181,6 +198,8 @@ class FsspecAdapter:
         self.datasets.clear()
 
     @lru_cache(maxsize=CACHE_SIZE)
+    # TODO: optimize "caching" more since for all files under the same directory
+    # they all would belong to the same dataset
     def get_dataset_path(self, path: Union[str, Path]) -> Path:
         path = Path(self.root, path)
         dspath = get_dataset_root(path)
