@@ -17,6 +17,7 @@ def test_fuse(tmp_path, url_dataset):
         sorted(q.name for q in tmp_path.iterdir())
         == [
             ".datalad",
+            ".git",
             ".gitattributes",
         ]
         + sorted(data_files)
@@ -43,6 +44,7 @@ def test_fuse_subdataset(tmp_path, superdataset, cache_clear, tmp_home):
         p.wait(timeout=3)
     assert sorted(q.name for q in tmp_path.iterdir()) == [
         ".datalad",
+        ".git",
         ".gitattributes",
         ".gitmodules",
         "sub",
@@ -51,6 +53,7 @@ def test_fuse_subdataset(tmp_path, superdataset, cache_clear, tmp_home):
         sorted(q.name for q in (tmp_path / "sub").iterdir())
         == [
             ".datalad",
+            ".git",
             ".gitattributes",
         ]
         + sorted(os.path.relpath(fname, "sub") for fname in data_files)
