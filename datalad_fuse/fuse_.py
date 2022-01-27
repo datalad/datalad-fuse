@@ -103,7 +103,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             lgr.debug("File exists; calling os.stat()")
             r = self._filter_stat(os.stat(path))
         elif op.lexists(path):
-            lgr.debug("Symlink exists? calling os.stat()")
+            lgr.debug("Broken symlink; calling os.lstat()")
             r = self._filter_stat(os.lstat(path))
         else:
             iadok = is_annex_dir_or_key(path)
