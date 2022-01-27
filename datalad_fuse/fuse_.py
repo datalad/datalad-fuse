@@ -4,9 +4,11 @@ import io
 import logging
 import os
 import os.path as op
+from pathlib import Path
 import stat
 from threading import Lock
 import time
+from typing import Optional, Tuple
 
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
@@ -104,8 +106,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             lgr.debug("Symlink exists? calling os.stat()")
             r = self._filter_stat(os.lstat(path))
         else:
-            topdir, dir_or_key = is_annnex_dir_or_key(path)
-            if topdir is not None:
+            iadok = is_annex_dir_or_key(path)
+            if iadok is not None:
+                topdir, dir_or_key = iadok
                 if dir_or_key == "key":
                     # needs to be open but it is a key. We will let fsspec
                     # to handle it
@@ -115,7 +118,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                     # TODO: cache this since would be a frequent operation
                     r = self._filter_stat(os.stat(topdir))
                 else:
-                    raise RuntimeError("must not get here")
+                    raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
         if r is None:
             if fh and fh >= self._counter_offset:
                 lgr.debug("File already open")
@@ -341,16 +344,22 @@ def file_getattr(f):
 
 # might be called twice in rapid succession for an annex key path
 @lru_cache(maxsize=CACHE_SIZE)
-def is_annnex_dir_or_key(path: str):
-    marker = ".git/annex/"
-    try:
-        idx = path.index(marker)
-        subpath = path[idx + len(marker) :]
-        # TODO: .git/annex/objects must exist, but freshly installed one would
-        # not have it
-        if subpath.startswith("objects/") and subpath.count("/") == 4:
-            return path[:idx], "key"
+def is_annex_dir_or_key(path: str) -> Optional[Tuple[str, str]]:
+    parts = list(Path(path).parts)
+    start = 0
+    while True:
+        try:
+            i = parts.index(".git", start)
+        except ValueError:
+            return None
+        if i + 1 < len(parts) and parts[i + 1] == "annex":
+            subpath = parts[i + 2 :]
+            topdir = str(Path(*parts[:i]))
+            # TODO: .git/annex/objects must exist, but freshly installed one
+            # would not have it
+            if subpath[:1] == ["objects"] and len(subpath) == 5:
+                return (topdir, "key")
+            else:
+                return (topdir, "dir")
         else:
-            return path[:idx], "dir"
-    except ValueError:
-        return None, None
+            start = i + 1
