@@ -225,19 +225,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     def readlink(self, path):
         lgr.debug("readlink(path=%r)", path)
-        linked_path = os.readlink(path)
-        # if self._adapter.is_under_annex(path):
-        #     # TODO: we need all leading dirs to exist
-        #     linked_path_full = op.join(op.dirname(path), linked_path)
-        #     linked_path_dir = op.dirname(linked_path_full)
-        #     if not op.exists(linked_path_dir):
-        #         # TODO: this is just a hack - would lack proper permissions etc
-        #         # and probably not needed per se!  We should probably just retain
-        #         # a dict of those we "created" and return the records for them if
-        #         # visited
-        #         lgr.debug("Creating %s", linked_path_dir)
-        #         os.makedirs(linked_path_dir)
-        return linked_path
+        return os.readlink(path)
 
     # ??? seek seems to be not implemented by fusepy/ Operations
 
