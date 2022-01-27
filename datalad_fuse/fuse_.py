@@ -4,7 +4,6 @@ import io
 import logging
 import os
 import os.path as op
-from pathlib import Path
 import stat
 from threading import Lock
 import time
@@ -107,11 +106,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         else:
             topdir, dir_or_key = is_annnex_dir_or_key(path)
             if topdir is not None:
-                if dir_or_key == 'key':
+                if dir_or_key == "key":
                     # needs to be open but it is a key. We will let fsspec
                     # to handle it
                     pass
-                elif dir_or_key == 'dir':
+                elif dir_or_key == "dir":
                     # just return that one of the top directory
                     # TODO: cache this since would be a frequent operation
                     r = self._filter_stat(os.stat(topdir))
@@ -124,7 +123,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 to_close = False
             else:
                 # TODO: it is expensive to open each file just for `getattr`!
-                # We should just fabricate stats from the key here or not even bother???!
+                # We should just fabricate stats from the key here or not even
+                # bother???!
                 lgr.debug("File not already open")
                 fsspec_file = self._adapter.open(path)
                 to_close = True
@@ -339,18 +339,18 @@ def file_getattr(f):
     return data
 
 
-
 # might be called twice in rapid succession for an annex key path
 @lru_cache(maxsize=CACHE_SIZE)
 def is_annnex_dir_or_key(path: str):
-    marker = '.git/annex/'
+    marker = ".git/annex/"
     try:
         idx = path.index(marker)
-        subpath = path[idx + len(marker):]
-        # TODO: .git/annex/objects must exist, but freshly installed one would not have it
-        if subpath.startswith('objects/') and subpath.count('/') == 4:
-            return path[:idx], 'key'
+        subpath = path[idx + len(marker) :]
+        # TODO: .git/annex/objects must exist, but freshly installed one would
+        # not have it
+        if subpath.startswith("objects/") and subpath.count("/") == 4:
+            return path[:idx], "key"
         else:
-            return path[:idx], 'dir'
+            return path[:idx], "dir"
     except ValueError:
         return None, None

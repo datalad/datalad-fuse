@@ -50,11 +50,12 @@ class DatasetAdapter:
         lgr.debug("get_file_state: %s", relpath)
 
         # Shortcut handling of content under .git, in particular - annex key paths
-        if relpath.startswith('.git/'):
-            # TODO: 6 is hardcoded but AFAIK and unfortunately annex does not support
-            # any layout which would have some other number of directories there. Nevertheless
-            # we might want to avoid relying on hardcoding 6 here?!
-            if relpath.startswith('.git/annex/objects/') and relpath.count('/') == 6:
+        if relpath.startswith(".git/"):
+            # TODO: 6 is hardcoded but AFAIK and unfortunately annex does not
+            # support any layout which would have some other number of
+            # directories there. Nevertheless we might want to avoid relying on
+            # hardcoding 6 here?!
+            if relpath.startswith(".git/annex/objects/") and relpath.count("/") == 6:
                 if p.exists():
                     return (FileState.HAS_CONTENT, p.name)
                 else:
