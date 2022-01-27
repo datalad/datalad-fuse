@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import pytest
 
+from datalad_fuse.fsspec import filename2key
 from datalad_fuse.fuse_ import is_annex_dir_or_key
 
 SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
@@ -42,3 +43,18 @@ SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
 )
 def test_is_annex_dir_or_key(path: str, expected: Optional[Tuple[str, str]]) -> None:
     assert is_annex_dir_or_key(path) == expected
+
+
+@pytest.mark.parametrize(
+    "filename,key",
+    [
+        (
+            "URL--http&c%%127.0.0.1&c35401%text.txt",
+            "URL--http://127.0.0.1:35401/text.txt",
+        ),
+        ("foo&ac", "foo&c"),
+        ("foo&a&s", "foo&%"),
+    ],
+)
+def test_filename2key(filename: str, key: str) -> None:
+    assert filename2key(filename) == key

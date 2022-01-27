@@ -57,9 +57,9 @@ class DatasetAdapter:
             # hardcoding 6 here?!
             if relpath.startswith(".git/annex/objects/") and relpath.count("/") == 6:
                 if p.exists():
-                    return (FileState.HAS_CONTENT, p.name)
+                    return (FileState.HAS_CONTENT, filename2key(p.name))
                 else:
-                    return (FileState.NO_CONTENT, p.name)
+                    return (FileState.NO_CONTENT, filename2key(p.name))
             return (FileState.NOT_ANNEXED, None)
 
         if not p.is_symlink():
@@ -76,7 +76,7 @@ class DatasetAdapter:
             target.relative_to(self.path / ".git" / "annex" / "objects")
         except ValueError:
             return (FileState.NOT_ANNEXED, None)
-        key = target.name
+        key = filename2key(target.name)
         if target.exists():
             return (FileState.HAS_CONTENT, key)
         else:
@@ -243,3 +243,11 @@ class FsspecAdapter:
 
 def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
+
+
+def filename2key(name: str) -> str:
+    # See `keyFile` and `fileKey` in `Annex/Locations.hs` in the git-annex
+    # source
+    return (
+        name.replace("%", "/").replace("&c", ":").replace("&s", "%").replace("&a", "&")
+    )
