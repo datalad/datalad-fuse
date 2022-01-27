@@ -39,10 +39,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     _counter_offset = 1000
 
-    def __init__(self, root):
+    def __init__(self, root, mode_transparent=False):
         self.root = op.realpath(root)
+        self.mode_transparent = mode_transparent
         self.rwlock = Lock()
-        self._adapter = FsspecAdapter(root)
+        self._adapter = FsspecAdapter(root, mode_transparent=mode_transparent)
         self._fhdict = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
         # and there is no seek so we should be ok even if the same file open
@@ -53,9 +54,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         lgr.debug("op=%s for path=%s with args %s", op, path, args)
         # if (".git", "annex", "objects") == Path(path).parts[-7:-4]:
         #     import pdb; pdb.set_trace()
-        # if ".git" in Path(path).parts:
-        #     lgr.debug("Raising ENOENT for .git")
-        #     raise FuseOSError(ENOENT)
+        if not self.mode_transparent and ".git" in Path(path).parts:
+            lgr.debug("Raising ENOENT for .git")
+            raise FuseOSError(ENOENT)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
     def destroy(self, _path=None):
@@ -102,23 +103,24 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         elif op.exists(path):
             lgr.debug("File exists; calling os.stat()")
             r = self._filter_stat(os.stat(path))
-        elif op.lexists(path):
-            lgr.debug("Broken symlink; calling os.lstat()")
-            r = self._filter_stat(os.lstat(path))
-        else:
-            iadok = is_annex_dir_or_key(path)
-            if iadok is not None:
-                topdir, dir_or_key = iadok
-                if dir_or_key == "key":
-                    # needs to be open but it is a key. We will let fsspec
-                    # to handle it
-                    pass
-                elif dir_or_key == "dir":
-                    # just return that one of the top directory
-                    # TODO: cache this since would be a frequent operation
-                    r = self._filter_stat(os.stat(topdir))
-                else:
-                    raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
+        elif self.mode_transparent:
+            if op.lexists(path):
+                lgr.debug("Broken symlink; calling os.lstat()")
+                r = self._filter_stat(os.lstat(path))
+            else:
+                iadok = is_annex_dir_or_key(path)
+                if iadok is not None:
+                    topdir, dir_or_key = iadok
+                    if dir_or_key == "key":
+                        # needs to be open but it is a key. We will let fsspec
+                        # to handle it
+                        pass
+                    elif dir_or_key == "dir":
+                        # just return that one of the top directory
+                        # TODO: cache this since would be a frequent operation
+                        r = self._filter_stat(os.stat(topdir))
+                    else:
+                        raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
         if r is None:
             if fh and fh >= self._counter_offset:
                 lgr.debug("File already open")
@@ -195,12 +197,13 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def readdir(self, path, _fh):
         lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
         paths = [".", ".."] + os.listdir(path)
-        # try:
-        #     paths.remove(".git")
-        # except ValueError:
-        #     pass
-        # else:
-        #     lgr.debug("Removed .git from dirlist")
+        if not self.mode_transparent:
+            try:
+                paths.remove(".git")
+            except ValueError:
+                pass
+            else:
+                lgr.debug("Removed .git from dirlist")
         return paths
 
     def release(self, path, fh):

@@ -21,8 +21,9 @@ FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 
 
 class DatasetAdapter:
-    def __init__(self, path: Union[str, Path]) -> None:
+    def __init__(self, path: Union[str, Path], mode_transparent: bool = False) -> None:
         self.path = Path(path)
+        self.mode_transparent = mode_transparent
         ds = Dataset(path)
         self.annex: Optional[AnnexRepo]
         if isinstance(ds.repo, AnnexRepo):
@@ -50,7 +51,7 @@ class DatasetAdapter:
         lgr.debug("get_file_state: %s", relpath)
 
         # Shortcut handling of content under .git, in particular - annex key paths
-        if relpath.startswith(".git/"):
+        if self.mode_transparent and relpath.startswith(".git/"):
             # TODO: 6 is hardcoded but AFAIK and unfortunately annex does not
             # support any layout which would have some other number of
             # directories there. Nevertheless we might want to avoid relying on
@@ -186,8 +187,9 @@ class DatasetAdapter:
 
 
 class FsspecAdapter:
-    def __init__(self, root: Union[str, Path]) -> None:
+    def __init__(self, root: Union[str, Path], mode_transparent: bool = False) -> None:
         self.root = Path(root)
+        self.mode_transparent = mode_transparent
         self.datasets: Dict[Path, DatasetAdapter] = {}
 
     def __enter__(self):
@@ -218,7 +220,9 @@ class FsspecAdapter:
         try:
             dsap = self.datasets[dspath]
         except KeyError:
-            dsap = self.datasets[dspath] = DatasetAdapter(dspath)
+            dsap = self.datasets[dspath] = DatasetAdapter(
+                dspath, mode_transparent=self.mode_transparent
+            )
         relpath = str(Path(filepath).relative_to(dspath))
         return dsap, relpath
 
