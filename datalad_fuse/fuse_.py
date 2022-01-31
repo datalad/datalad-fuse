@@ -62,10 +62,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def destroy(self, _path=None):
         lgr.warning("Destroying fsspecs and collection of %d fhs", len(self._fhdict))
         for f in self._fhdict.values():
-            try:
-                f.close()
-            except Exception as e:
-                lgr.error("%s", e)
+            if f is not None:
+                try:
+                    f.close()
+                except Exception as e:
+                    lgr.error("%s", e)
         self._fhdict = {}
         cache_clear = cfg.get("datalad.fusefs.cache-clear")
         if cache_clear == "visited":
@@ -121,6 +122,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                         r = self._filter_stat(os.stat(topdir))
                     else:
                         raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
+                elif self.is_under_git(path):
+                    lgr.debug("Path under .git does not exist; raising ENOENT")
+                    raise FuseOSError(ENOENT)
         if r is None:
             if fh and fh >= self._counter_offset:
                 lgr.debug("File already open")
@@ -155,8 +159,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def open(self, path, flags):
         lgr.debug("open(path=%r, flags=%#x)", path, flags)
         # fn = "".join([self.root, path.lstrip("/")])
-        if op.exists(path):
-            lgr.debug("Path exists; opening directly")
+        if op.exists(path) or (self.mode_transparent and self.is_under_git(path)):
+            if op.exists(path):
+                lgr.debug("Path exists; opening directly")
+            else:
+                lgr.debug("Path is under .git/; opening directly")
             fh = os.open(path, flags)
             if fh >= self._counter_offset:
                 raise RuntimeError(
@@ -194,6 +201,17 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             f.seek(offset)
             return f.read(size)
 
+    def opendir(self, path):
+        lgr.debug("opendir(path=%r)", path)
+        if not op.exists(path):
+            lgr.debug("Directory does not exist; raising ENOENT")
+            raise FuseOSError(ENOENT)
+        lgr.debug("Counter = %d", self._counter)
+        # TODO: threadlock ?
+        self._fhdict[self._counter] = None
+        self._counter += 1
+        return self._counter - 1
+
     def readdir(self, path, _fh):
         lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
         paths = [".", ".."] + os.listdir(path)
@@ -219,7 +237,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             # TODO: this .close is not sufficient -- _fhdict is breeding open
             #  files, so we need to provide some proper use of lru_cache
             #  to have not recently used closed
-            if not f.closed:
+            if f is not None and not f.closed:
                 f.close()
         return 0
 
@@ -298,14 +316,30 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         with open(path, "r+") as f:
             f.truncate(length)
 
-    unlink = write_op(os.unlink)
+    def unlink(self, path):
+        if self.mode_transparent and self.is_under_git(path):
+            with self.rwlock:
+                return os.unlink(path)
+        else:
+            raise FuseOSError(EROFS)
+
     utimens = os.utime
 
-    @write_op
-    def write(self, _path, data, offset, fh):
-        with self.rwlock:
-            os.lseek(fh, offset, 0)
-            return os.write(fh, data)
+    def write(self, path, data, offset, fh):
+        if self.mode_transparent and self.is_under_git(path):
+            with self.rwlock:
+                os.lseek(fh, offset, 0)
+                return os.write(fh, data)
+        else:
+            raise FuseOSError(EROFS)
+
+    def is_under_git(self, path):
+        try:
+            Path(path).relative_to(Path(self.root, ".git"))
+        except ValueError:
+            return False
+        else:
+            return True
 
 
 def file_getattr(f):
