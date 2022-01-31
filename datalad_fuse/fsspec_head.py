@@ -47,6 +47,11 @@ class FsspecHead(Interface):
             doc="How many bytes to show",
             constraints=EnsureInt() | EnsureNone(),
         ),
+        "mode_transparent": Parameter(
+            args=("--mode-transparent",),
+            action="store_true",
+            doc="Support reading from .git directory",
+        ),
         "path": Parameter(
             args=("path",),
             doc="Path to an annexed file to show the leading contents of",
@@ -62,13 +67,14 @@ class FsspecHead(Interface):
         dataset: Optional[Dataset] = None,
         lines: Optional[int] = None,
         bytes: Optional[int] = None,
+        mode_transparent: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(dataset, purpose="fetch file data", check_installed=True)
         if lines is not None and bytes is not None:
             raise ValueError("'lines' and 'bytes' are mutually exclusive")
         elif lines is None and bytes is None:
             lines = DEFAULT_LINES
-        with FsspecAdapter(ds.path) as fsa:
+        with FsspecAdapter(ds.path, mode_transparent=mode_transparent) as fsa:
             if not os.path.isabs(path):
                 path = os.path.join(ds.path, path)
             with fsa.open(path) as fp:

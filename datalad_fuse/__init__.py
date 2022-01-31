@@ -78,7 +78,12 @@ class FuseFS(Interface):
             args=("-f", "--foreground"),
             action="store_true",
             doc="""Run process in foreground [required].""",
-        )
+        ),
+        "mode_transparent": Parameter(
+            args=("--mode-transparent",),
+            action="store_true",
+            doc="Expose .git directory",
+        ),
         # TODO: (might better become config vars?)
         # --cache=persist
         # --recursive=follow,get - encountering submodule might install it first
@@ -89,7 +94,10 @@ class FuseFS(Interface):
     @datasetmethod(name="fusefs")
     @eval_results
     def __call__(
-        mount_path: str, dataset: Optional[Dataset] = None, foreground: bool = False
+        mount_path: str,
+        dataset: Optional[Dataset] = None,
+        foreground: bool = False,
+        mode_transparent: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         if not foreground:
             yield get_status_dict(
@@ -103,7 +111,7 @@ class FuseFS(Interface):
             dataset, purpose="mount as FUSE system", check_installed=True
         )
         FUSE(
-            DataLadFUSE(ds.path),
+            DataLadFUSE(ds.path, mode_transparent=mode_transparent),
             mount_path,
             foreground=foreground,
             # , allow_other=True
