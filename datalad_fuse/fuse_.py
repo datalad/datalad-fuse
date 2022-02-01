@@ -294,14 +294,14 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     @write_op
     def link(self, target, source):
-        if source.startswith("/.git/"):
+        if "/.git/" in source:
             return os.link(self.root + source, target)
         else:
             raise FuseOSError(EROFS)
 
     @write_op
     def rename(self, old, new):
-        if new.startswith("/.git/"):
+        if "/.git/" in new:
             return os.rename(old, self.root + new)
         else:
             raise FuseOSError(EROFS)
@@ -341,12 +341,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             return os.write(fh, data)
 
     def is_under_git(self, path):
-        try:
-            Path(path).relative_to(Path(self.root, ".git"))
-        except ValueError:
-            return False
-        else:
-            return True
+        return ".git" in Path(path).relative_to(self.root).parts
 
 
 def file_getattr(f):
