@@ -1,5 +1,5 @@
 from errno import ENOENT, EROFS
-from functools import lru_cache
+from functools import lru_cache, wraps
 import io
 import logging
 import os
@@ -24,13 +24,17 @@ from .utils import is_annex_dir_or_key
 lgr = logging.getLogger("datalad.fuse")
 
 
-def write_op(_f):
-    """Decorator for operations which need to write
+def write_op(f):
+    """Decorator for operations which need to write"""
 
-    We might not want them ATM
-    """
-    # TODO: allow rw
-    return None
+    @wraps(f)
+    def wrapped(self, path, *args, **kwargs):
+        if self.mode_transparent and self.is_under_git(path):
+            return f(self, path, *args, **kwargs)
+        else:
+            raise FuseOSError(EROFS)
+
+    return wrapped
 
 
 class DataLadFUSE(Operations):  # LoggingMixIn,
@@ -100,7 +104,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         r = None
         if fh and fh < self._counter_offset:
             lgr.debug("Calling os.fstat()")
-            r = os.fstat(fh)
+            r = self._filter_stat(os.fstat(fh))
         elif op.exists(path):
             lgr.debug("File exists; calling os.stat()")
             r = self._filter_stat(os.stat(path))
@@ -284,20 +288,23 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     #         raise FuseOSError(EACCES)
     #
 
-    #
-    # Write operations we do not support anyhow ATM, but may be should?
-    #
     @write_op
     def create(self, path, mode):
         return os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
 
     @write_op
     def link(self, target, source):
-        return os.link(self.root + source, target)
+        if source.startswith("/.git/"):
+            return os.link(self.root + source, target)
+        else:
+            raise FuseOSError(EROFS)
 
     @write_op
     def rename(self, old, new):
-        return os.rename(old, self.root + new)
+        if new.startswith("/.git/"):
+            return os.rename(old, self.root + new)
+        else:
+            raise FuseOSError(EROFS)
 
     # def statfs(self, path):
     #     lgr.mydebug(f"statfs {path}")
@@ -316,22 +323,22 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         with open(path, "r+") as f:
             f.truncate(length)
 
+    @write_op
     def unlink(self, path):
-        if self.mode_transparent and self.is_under_git(path):
-            with self.rwlock:
-                return os.unlink(path)
-        else:
-            raise FuseOSError(EROFS)
+        with self.rwlock:
+            return os.unlink(path)
 
-    utimens = os.utime
-
-    def write(self, path, data, offset, fh):
-        if self.mode_transparent and self.is_under_git(path):
-            with self.rwlock:
-                os.lseek(fh, offset, 0)
-                return os.write(fh, data)
+    def utimens(self, path, times=None):
+        if times is not None:
+            return os.utime(path, ns=times)
         else:
-            raise FuseOSError(EROFS)
+            return os.utime(path)
+
+    @write_op
+    def write(self, _path, data, offset, fh):
+        with self.rwlock:
+            os.lseek(fh, offset, 0)
+            return os.write(fh, data)
 
     def is_under_git(self, path):
         try:
