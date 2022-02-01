@@ -6,12 +6,14 @@ from datalad_fuse.fsspec import filename2key
 from datalad_fuse.fuse_ import is_annex_dir_or_key
 
 SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
+URL_KEY = "URL--http&c%%127.0.0.1&c55485%binary.png"
 
 
 @pytest.mark.parametrize(
     "path,expected",
     [
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}/{SAMPLE_KEY}", (".", "key")),
+        (f".git/annex/objects/p2/pX/{URL_KEY}/{URL_KEY}", (".", "key")),
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}/", (".", "dir")),
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}", (".", "dir")),
         (".git/annex/objects/p0/4v", (".", "dir")),
@@ -28,8 +30,17 @@ SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
         ("foo.txt", None),
         ("foo.git/annex/objects/p0/4v", None),
         ("some/project/.git/refs/heads", None),
-        ("some/project/.git/annex", ("some/project", "dir")),
-        ("some/project/.git/annex/other", ("some/project", "dir")),
+        ("some/project/.git/annex", None),
+        ("some/project/.git/annex/other", None),
+        ("some/project/.git/annex/objects/layout_config.json", None),
+        ("some/project/.git/annex/objects/p0/layout_config.json", None),
+        ("some/project/.git/annex/objects/p0/4v/layout_config.json", None),
+        (f"some/project/.git/annex/objects/p0/4v/{SAMPLE_KEY}/notmatchingkey", None),
+        (
+            f"some/project/.git/annex/objects/p0/4v/{SAMPLE_KEY}/{SAMPLE_KEY}/notmatchingkey",
+            None,
+        ),
+        ("some/project/.git/annex/objects/p0/4v/notmatchingkey/notmatchingkey", None),
         (
             "some/project/.git/embedded/sub/.git/annex/objects/p0/4v/"
             f"{SAMPLE_KEY}/{SAMPLE_KEY}",
