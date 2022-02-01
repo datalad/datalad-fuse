@@ -5,6 +5,7 @@ import logging
 import os
 import os.path as op
 from pathlib import Path
+import re
 import stat
 from threading import Lock
 import time
@@ -343,7 +344,9 @@ def is_annex_dir_or_key(path: str) -> Optional[Tuple[str, str]]:
             i = parts.index(".git", start)
         except ValueError:
             return None
-        if parts[i + 1 : i + 3] == ["annex", "objects"]:
+        if parts[i + 1 : i + 3] == ["annex", "objects"] and all(
+            re.fullmatch(r"[A-Za-z0-9]{2}", p) for p in parts[i + 3 : i + 5]
+        ):
             topdir = str(Path(*parts[:i]))
             # TODO: .git/annex/objects must exist, but freshly installed one
             # would not have it
