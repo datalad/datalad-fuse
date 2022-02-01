@@ -343,12 +343,11 @@ def is_annex_dir_or_key(path: str) -> Optional[Tuple[str, str]]:
             i = parts.index(".git", start)
         except ValueError:
             return None
-        if i + 1 < len(parts) and parts[i + 1] == "annex":
-            subpath = parts[i + 2 :]
+        if parts[i + 1 : i + 3] == ["annex", "objects"]:
             topdir = str(Path(*parts[:i]))
             # TODO: .git/annex/objects must exist, but freshly installed one
             # would not have it
-            if subpath[:1] == ["objects"] and len(subpath) == 5:
+            if len(parts) - (i + 3) == 4:
                 return (topdir, "key")
             else:
                 return (topdir, "dir")
