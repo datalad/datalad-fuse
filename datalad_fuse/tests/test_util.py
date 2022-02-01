@@ -6,12 +6,14 @@ from datalad_fuse.fsspec import filename2key
 from datalad_fuse.fuse_ import is_annex_dir_or_key
 
 SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
+URL_KEY = "URL--http&c%%127.0.0.1&c55485%binary.png"
 
 
 @pytest.mark.parametrize(
     "path,expected",
     [
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}/{SAMPLE_KEY}", (".", "key")),
+        (f".git/annex/objects/p2/pX/{URL_KEY}/{URL_KEY}", (".", "key")),
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}/", (".", "dir")),
         (f".git/annex/objects/p0/4v/{SAMPLE_KEY}", (".", "dir")),
         (".git/annex/objects/p0/4v", (".", "dir")),

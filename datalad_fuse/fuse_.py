@@ -351,8 +351,12 @@ def is_annex_dir_or_key(path: str) -> Optional[Tuple[str, str]]:
             depth = len(parts) - i
             if depth <= 5:  # have only two level of hash'ing directories
                 return (topdir, "dir")
-            # matches an annex key regex in the form of BACKEND-[sSIZE]--HASH[EXTENSION]
-            if re.fullmatch(r"[A-Z0-9_]{2,14}-[s0-9]*--.*", parts[i + 5]):
+            # matches an annex key regex in the form of
+            # BACKEND[-sSIZE][-mMTIME][-Ssize-Cchunk]--HASH[EXTENSION]
+            if re.fullmatch(
+                r"[A-Z0-9_]{2,14}(?:-s[0-9]+)?(?:-m[0-9]+)?(?:-S[0-9]+-C[0-9]+)?--.*",
+                parts[i + 5],
+            ):
                 # note: key and its directory must match in name
                 if depth == 7 and parts[-1] == parts[-2]:
                     return (topdir, "key")
