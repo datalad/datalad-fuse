@@ -348,11 +348,14 @@ def is_annex_dir_or_key(path: str) -> Optional[Tuple[str, str]]:
             re.fullmatch(r"[A-Za-z0-9]{2}", p) for p in parts[i + 3 : i + 5]
         ):
             topdir = str(Path(*parts[:i]))
-            # TODO: .git/annex/objects must exist, but freshly installed one
-            # would not have it
-            if len(parts) - (i + 3) == 4:
-                return (topdir, "key")
-            else:
+            depth = len(parts) - i
+            if depth <= 5:  # have only two level of hash'ing directories
                 return (topdir, "dir")
-        else:
-            start = i + 1
+            # matches an annex key regex in the form of BACKEND-[sSIZE]--HASH[EXTENSION]
+            if re.fullmatch(r"[A-Z0-9_]{2,14}-[s0-9]*--.*", parts[i + 5]):
+                # note: key and its directory must match in name
+                if depth == 7 and parts[-1] == parts[-2]:
+                    return (topdir, "key")
+                elif depth == 6:
+                    return (topdir, "dir")
+        start = i + 1

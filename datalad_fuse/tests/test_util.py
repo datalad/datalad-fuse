@@ -31,6 +31,14 @@ SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
         ("some/project/.git/annex", None),
         ("some/project/.git/annex/other", None),
         ("some/project/.git/annex/objects/layout_config.json", None),
+        ("some/project/.git/annex/objects/p0/layout_config.json", None),
+        ("some/project/.git/annex/objects/p0/4v/layout_config.json", None),
+        (f"some/project/.git/annex/objects/p0/4v/{SAMPLE_KEY}/notmatchingkey", None),
+        (
+            f"some/project/.git/annex/objects/p0/4v/{SAMPLE_KEY}/{SAMPLE_KEY}/notmatchingkey",
+            None,
+        ),
+        ("some/project/.git/annex/objects/p0/4v/notmatchingkey/notmatchingkey", None),
         (
             "some/project/.git/embedded/sub/.git/annex/objects/p0/4v/"
             f"{SAMPLE_KEY}/{SAMPLE_KEY}",
