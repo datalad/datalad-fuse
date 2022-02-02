@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import pytest
 
 from datalad_fuse.fsspec import filename2key
-from datalad_fuse.fuse_ import is_annex_dir_or_key
+from datalad_fuse.utils import is_annex_dir_or_key
 
 SAMPLE_KEY = "MD5E-s1064--8804d3d11f17e33bd912f1f0947afdb9.json"
 URL_KEY = "URL--http&c%%127.0.0.1&c55485%binary.png"

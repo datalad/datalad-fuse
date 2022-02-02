@@ -14,6 +14,7 @@ from fsspec.exceptions import BlocksizeMismatchError
 from fsspec.implementations.cached import CachingFileSystem
 
 from .consts import CACHE_SIZE
+from .utils import is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse.fsspec")
 
@@ -50,19 +51,23 @@ class DatasetAdapter:
         p = self.path / relpath
         lgr.debug("get_file_state: %s", relpath)
 
+        def handle_path_under_annex_objects(p: Path):
+            iadok = is_annex_dir_or_key(p)
+            if iadok is not None and iadok[1] == "key":
+                assert iadok[0] == str(self.path)
+                key = filename2key(p.name)
+                if p.exists():
+                    return (FileState.HAS_CONTENT, key)
+                else:
+                    return (FileState.NO_CONTENT, key)
+            else:
+                return (FileState.NOT_ANNEXED, None)
+
         # Shortcut handling of content under .git, in particular - annex key paths
         if self.mode_transparent and relpath.startswith(".git/"):
-            # TODO: 6 is hardcoded but AFAIK and unfortunately annex does not
-            # support any layout which would have some other number of
-            # directories there. Nevertheless we might want to avoid relying on
-            # hardcoding 6 here?!
-            if relpath.startswith(".git/annex/objects/") and relpath.count("/") == 6:
-                if p.exists():
-                    return (FileState.HAS_CONTENT, filename2key(p.name))
-                else:
-                    return (FileState.NO_CONTENT, filename2key(p.name))
-            return (FileState.NOT_ANNEXED, None)
+            return handle_path_under_annex_objects(p)
 
+        # A regular file or git link for which we need to explicitly ask annex about
         if not p.is_symlink():
             if p.stat().st_size < 1024 and self.annex is not None:
                 if self.annex.is_under_annex(relpath, batch=True):
@@ -72,16 +77,10 @@ class DatasetAdapter:
                     else:
                         return (FileState.NO_CONTENT, key)
             return (FileState.NOT_ANNEXED, None)
-        target = Path(os.path.normpath(p.parent / os.readlink(p)))
-        try:
-            target.relative_to(self.path / ".git" / "annex" / "objects")
-        except ValueError:
-            return (FileState.NOT_ANNEXED, None)
-        key = filename2key(target.name)
-        if target.exists():
-            return (FileState.HAS_CONTENT, key)
-        else:
-            return (FileState.NO_CONTENT, key)
+
+        return handle_path_under_annex_objects(
+            Path(os.path.normpath(p.parent / os.readlink(p)))
+        )
 
     def get_urls(self, key: str) -> Iterator[str]:
         assert self.annex is not None
