@@ -163,7 +163,11 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     def open(self, path, flags):
         lgr.debug("open(path=%r, flags=%#x)", path, flags)
         # fn = "".join([self.root, path.lstrip("/")])
-        if op.exists(path) or (self.mode_transparent and self.is_under_git(path)):
+        if op.exists(path) or (
+            self.mode_transparent
+            and self.is_under_git(path)
+            and is_annex_dir_or_key(path) is None
+        ):
             if op.exists(path):
                 lgr.debug("Path exists; opening directly")
             else:
