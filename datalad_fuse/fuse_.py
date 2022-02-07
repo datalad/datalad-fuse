@@ -1,5 +1,6 @@
 from ctypes import CDLL, c_int, c_void_p
 from ctypes.util import find_library
+from datetime import datetime
 from errno import ENOENT, EROFS
 from functools import lru_cache, wraps
 import io
@@ -9,7 +10,6 @@ import os.path as op
 from pathlib import Path
 import stat
 from threading import Lock
-import time
 
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
@@ -158,7 +158,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                     r = self._filter_stat(os.stat(fsspec_file.name))
                 else:
                     lgr.debug("File object is fsspec object")
-                    r = file_getattr(fsspec_file)
+                    r = file_getattr(
+                        fsspec_file, timestamp=self._adapter.get_commit_datetime(path)
+                    )
                 if to_close:
                     fsspec_file.close()
             else:
@@ -362,7 +364,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         return ".git" in Path(path).relative_to(self.root).parts
 
 
-def file_getattr(f):
+def file_getattr(f, timestamp: datetime):
     # code borrowed from fsspec.fuse:FUSEr.getattr
     # TODO: improve upon! there might be mtime of url
     try:
@@ -381,7 +383,7 @@ def file_getattr(f):
         data["st_size"] = info["size"]
         data["st_blksize"] = 5 * 2 ** 20
         data["st_nlink"] = 1
-    data["st_atime"] = time.time()
-    data["st_ctime"] = time.time()
-    data["st_mtime"] = time.time()
+    data["st_atime"] = timestamp.timestamp()
+    data["st_ctime"] = timestamp.timestamp()
+    data["st_mtime"] = timestamp.timestamp()
     return data
