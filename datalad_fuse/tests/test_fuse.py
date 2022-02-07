@@ -4,8 +4,9 @@ import subprocess
 from datalad.api import Dataset
 import pytest
 
+pytestmark = pytest.mark.libfuse
 
-@pytest.mark.libfuse
+
 @pytest.mark.parametrize("transparent", [False, True])
 def test_fuse(tmp_path, transparent, url_dataset):
     ds, data_files = url_dataset
@@ -27,7 +28,6 @@ def test_fuse(tmp_path, transparent, url_dataset):
     p.terminate()
 
 
-@pytest.mark.libfuse
 @pytest.mark.parametrize("cache_clear", [None, "recursive", "visited"])
 @pytest.mark.parametrize("transparent", [False, True])
 def test_fuse_subdataset(tmp_path, superdataset, cache_clear, transparent, tmp_home):
@@ -67,7 +67,6 @@ def test_fuse_subdataset(tmp_path, superdataset, cache_clear, transparent, tmp_h
         assert list(cachedir.iterdir()) != []
 
 
-@pytest.mark.libfuse
 def test_fuse_transparent_hash_object(tmp_path):
     ds = Dataset(tmp_path / "ds").create()
     mount = tmp_path / "mount"
@@ -123,7 +122,6 @@ def test_fuse_transparent_hash_object(tmp_path):
     assert r.stdout == CONTENT
 
 
-@pytest.mark.libfuse
 def test_fuse_transparent_hash_object_subdataset(tmp_path):
     ds = Dataset(tmp_path / "ds").create()
     ds.create(tmp_path / "ds" / "sub")
@@ -186,3 +184,35 @@ def test_fuse_transparent_hash_object_subdataset(tmp_path):
         stdout=subprocess.PIPE,
     )
     assert r.stdout == CONTENT
+
+
+def test_fuse_lock(tmp_path):
+    CONTENT = "This is test text.\n"
+    ds = Dataset(tmp_path / "ds").create(cfg_proc="text2git")
+    (tmp_path / "ds" / "text.txt").write_text(CONTENT)
+    ds.save(message="Create text file")
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    p = subprocess.Popen(
+        [
+            "datalad",
+            "fusefs",
+            "-d",
+            ds.path,
+            "--foreground",
+            "--mode-transparent",
+            str(mount),
+        ]
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        p.wait(timeout=3)
+    try:
+        subprocess.run(
+            ["git-annex", "smudge", "--clean", "--", "text.txt"],
+            cwd=mount,
+            check=True,
+            input=CONTENT,
+            universal_newlines=True,
+        )
+    finally:
+        p.terminate()
