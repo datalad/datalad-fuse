@@ -1,3 +1,5 @@
+from ctypes import CDLL, c_int, c_void_p
+from ctypes.util import find_library
 from errno import ENOENT, EROFS
 from functools import lru_cache, wraps
 import io
@@ -22,6 +24,14 @@ from .fsspec import FsspecAdapter
 from .utils import is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse")
+
+libcname = find_library("c")
+assert libcname is not None
+libc = CDLL(libcname)
+
+fcntl = libc.fcntl
+fcntl.argtypes = [c_int, c_int, c_void_p]
+fcntl.restype = c_int
 
 
 def write_op(f):
@@ -343,6 +353,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         with self.rwlock:
             os.lseek(fh, offset, 0)
             return os.write(fh, data)
+
+    @write_op
+    def lock(self, _path, fh, cmd, lock):
+        return fcntl(fh, cmd, lock)
 
     def is_under_git(self, path):
         return ".git" in Path(path).relative_to(self.root).parts
