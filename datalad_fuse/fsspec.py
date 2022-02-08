@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from enum import Enum
 from functools import lru_cache
 import logging
@@ -31,6 +32,9 @@ class DatasetAdapter:
             self.annex = ds.repo
         else:
             self.annex = None
+        self.commit_dt = datetime.fromtimestamp(
+            ds.repo.get_commit_date(), tz=timezone.utc
+        )
         self.fs = CachingFileSystem(
             fs=fsspec.filesystem("http"),
             # target_protocol='blockcache',
@@ -242,6 +246,10 @@ class FsspecAdapter:
         dsap, relpath = self.resolve_dataset(filepath)
         fstate, _ = dsap.get_file_state(relpath)
         return fstate is not FileState.NOT_ANNEXED
+
+    def get_commit_datetime(self, filepath: Union[str, Path]) -> datetime:
+        dsap, _ = self.resolve_dataset(filepath)
+        return dsap.commit_dt
 
 
 def is_http_url(s: str) -> bool:
