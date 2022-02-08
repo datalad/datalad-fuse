@@ -216,3 +216,37 @@ def test_fuse_lock(tmp_path):
         )
     finally:
         p.terminate()
+
+
+def test_fuse_git_status(tmp_path):
+    CONTENT = "This is test text.\n"
+    ds = Dataset(tmp_path / "ds").create(cfg_proc="text2git")
+    (tmp_path / "ds" / "text.txt").write_text(CONTENT)
+    ds.save(message="Create text file")
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    p = subprocess.Popen(
+        [
+            "datalad",
+            "fusefs",
+            "-d",
+            ds.path,
+            "--foreground",
+            "--mode-transparent",
+            str(mount),
+        ]
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        p.wait(timeout=3)
+    try:
+        r = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=mount,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+        )
+        assert r.stdout == ""
+    finally:
+        p.terminate()
