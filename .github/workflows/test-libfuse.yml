@@ -31,15 +31,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install datalad tox
+          python -m pip install coverage datalad tox
 
       - name: Run tests
         run: |
-          mkdir -p __testhome__
-          cd __testhome__
           # give detailed info on actual test setup
           datalad wtf
-          tox -e py3 -- --libfuse --cov-report=xml
+          tox -e py3 -- --libfuse
+          coverage xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
