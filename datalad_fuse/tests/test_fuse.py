@@ -40,6 +40,7 @@ def fusing(
         yield mount_dir
     finally:
         p.terminate()
+        p.wait(timeout=3)
     if wait:
         p.wait()
 
