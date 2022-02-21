@@ -5,6 +5,7 @@
 *.py[coe]
 .#*
 .*.swp
+.asv/
 pip-wheel-metadata
 docs/build
 docs/source/generated
