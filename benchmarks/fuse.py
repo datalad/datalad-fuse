@@ -9,12 +9,10 @@ class FuseBenchmarks:
     timeout = 3600
 
     def setup_cache(self):
-        subprocess.run(
-            ["git", "clone", TEST_REPO, "work"],
-            check=True,
-        )
-        subprocess.run(["git", "checkout", TEST_TAG], cwd="work", check=True)
-        return Path("work").resolve()
+        work_dir = Path("000007")
+        subprocess.run(["datalad", "install", TEST_REPO], check=True)
+        subprocess.run(["git", "checkout", TEST_TAG], cwd=str(work_dir), check=True)
+        return work_dir
 
     def setup(self, work_dir):
         self.mount = Path("mount")
