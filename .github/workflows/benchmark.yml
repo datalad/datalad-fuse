@@ -1,0 +1,63 @@
+name: Benchmark
+
+on:
+  pull_request:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up system
+        shell: bash
+        run: |
+          bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh)
+          sudo apt-get update -qq
+          sudo apt-get install eatmydata
+          sudo eatmydata apt-get install -y fuse git-annex-standalone
+
+      - name: Check out repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.6
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install --upgrade asv virtualenv
+
+      - name: Set up machine profile
+        run: asv machine --yes
+
+      - name: Save comparison points as GitHub refs
+        run: |
+          # If this is a PR run, then HEAD is a refs/pull/:number/merge ref and
+          # HEAD^1 is the target that the PR will be merged into.
+
+          # If this is a push run, then HEAD is the most recently-pushed commit
+          # and HEAD^1 is the commit before it (which may or may not be the
+          # previous HEAD for the branch, depending on whether multiple commits
+          # were pushed at once).
+
+          git update-ref refs/bm/pr HEAD
+          git update-ref refs/bm/merge-target HEAD^1
+
+      - name: Run benchmarks on newest code
+        run: asv run --strict --show-stderr --python 3.6 HEAD^-1
+
+      - name: Check out previous code
+        run: git checkout --force refs/bm/merge-target
+
+      - name: Run benchmarks on previous code
+        run: asv run --strict --show-stderr --python 3.6 HEAD^-1
+
+      - name: Compare benchmarks on previous & newest code
+        run: asv compare refs/bm/merge-target refs/bm/pr
+
+      - name: Fail if any benchmarks have slowed down too much
+        run: |
+          ! asv compare --factor 1.2 --split refs/bm/merge-target refs/bm/pr | grep -q "got worse"
