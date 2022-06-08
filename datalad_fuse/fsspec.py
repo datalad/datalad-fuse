@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from enum import Enum
-from functools import lru_cache
 import logging
 import os
 import os.path
@@ -13,6 +12,7 @@ from datalad.utils import get_dataset_root
 import fsspec
 from fsspec.exceptions import BlocksizeMismatchError
 from fsspec.implementations.cached import CachingFileSystem
+import methodtools
 
 from .consts import CACHE_SIZE
 from .utils import is_annex_dir_or_key
@@ -50,7 +50,7 @@ class DatasetAdapter:
         if self.annex is not None:
             self.annex._batched.clear()
 
-    @lru_cache(maxsize=CACHE_SIZE)
+    @methodtools.lru_cache(maxsize=CACHE_SIZE)
     def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[str]]:
         p = self.path / relpath
         lgr.debug("get_file_state: %s", relpath)
@@ -203,7 +203,7 @@ class FsspecAdapter:
             ds.close()
         self.datasets.clear()
 
-    @lru_cache(maxsize=CACHE_SIZE)
+    @methodtools.lru_cache(maxsize=CACHE_SIZE)
     # TODO: optimize "caching" more since for all files under the same directory
     # they all would belong to the same dataset
     def get_dataset_path(self, path: Union[str, Path]) -> Path:
