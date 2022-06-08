@@ -2,7 +2,7 @@ from ctypes import CDLL, c_int, c_void_p
 from ctypes.util import find_library
 from datetime import datetime
 from errno import ENOENT, EROFS
-from functools import lru_cache, wraps
+from functools import wraps
 import io
 import logging
 import os
@@ -14,6 +14,7 @@ from threading import Lock
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
+import methodtools
 
 from .consts import CACHE_SIZE
 from .fsspec import FsspecAdapter
@@ -107,7 +108,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             )
         )
 
-    @lru_cache(maxsize=CACHE_SIZE)
+    @methodtools.lru_cache(maxsize=CACHE_SIZE)
     def getattr(self, path, fh=None):
         # TODO: support of unlocked files... but at what cost?
         lgr.debug("getattr(path=%r, fh=%r)", path, fh)
@@ -381,7 +382,7 @@ def file_getattr(f, timestamp: datetime):
     else:
         data["st_mode"] = stat.S_IFREG | 0o644
         data["st_size"] = info["size"]
-        data["st_blksize"] = 5 * 2 ** 20
+        data["st_blksize"] = 5 * 2**20
         data["st_nlink"] = 1
     data["st_atime"] = timestamp.timestamp()
     data["st_ctime"] = timestamp.timestamp()
