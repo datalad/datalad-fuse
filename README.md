@@ -64,9 +64,14 @@ will have their caches cleared; if it is instead set to "`recursive`", then all
 
 #### Options
 
+- `--allow-other` — Allow all users to access files in the mount.  This
+  requires setting `user_allow_other` in `/etc/fuse.conf`.
+
 - `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
   If no dataset is given, an attempt is made to identify the dataset based on
   the current working directory.
 
 - `-f`, `--foreground` — Run the FUSE process in the foreground; use Ctrl-C to
   exit.  This option is currently required.
+
+- `--mode-transparent` — Expose the dataset's `.git` directory in the mount

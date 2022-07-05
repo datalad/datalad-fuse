@@ -74,6 +74,14 @@ class FuseFS(Interface):
             metavar="PATH",
             doc="""Path where to mount the dataset (should exist).""",
         ),
+        "allow_other": Parameter(
+            args=("--allow-other",),
+            action="store_true",
+            doc=(
+                "Allow all users to access files in the mount"
+                " (Requires configuration in /etc/fuse.conf)"
+            ),
+        ),
         "foreground": Parameter(
             args=("-f", "--foreground"),
             action="store_true",
@@ -98,6 +106,7 @@ class FuseFS(Interface):
         dataset: Optional[Dataset] = None,
         foreground: bool = False,
         mode_transparent: bool = False,
+        allow_other: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         if not foreground:
             yield get_status_dict(
@@ -114,7 +123,7 @@ class FuseFS(Interface):
             DataLadFUSE(ds.path, mode_transparent=mode_transparent),
             mount_path,
             foreground=foreground,
-            # , allow_other=True
+            allow_other=allow_other,
         )
         yield get_status_dict(action="fusefs", path=mount_path, status="ok")
 
