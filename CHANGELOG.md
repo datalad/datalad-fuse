@@ -1,3 +1,29 @@
+# 0.3.0 (Tue Jul 05 2022)
+
+#### 🚀 Enhancement
+
+- Add `--allow-other` option [#77](https://github.com/datalad/datalad-fuse/pull/77) ([@jwodder](https://github.com/jwodder))
+
+#### 🐛 Bug Fix
+
+- DOC: Set language in Sphinx config to en [#72](https://github.com/datalad/datalad-fuse/pull/72) ([@adswa](https://github.com/adswa))
+
+#### 🏠 Internal
+
+- Include "data package" in project [#75](https://github.com/datalad/datalad-fuse/pull/75) ([@jwodder](https://github.com/jwodder))
+- Use methodtools.lru_cache [#74](https://github.com/datalad/datalad-fuse/pull/74) ([@jwodder](https://github.com/jwodder))
+
+#### 🧪 Tests
+
+- Setup benchmarking with asv [#70](https://github.com/datalad/datalad-fuse/pull/70) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 2
+
+- Adina Wagner ([@adswa](https://github.com/adswa))
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
 # 0.2.0 (Fri Feb 18 2022)
 
 #### 🚀 Enhancement
