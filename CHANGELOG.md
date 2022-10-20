@@ -1,3 +1,24 @@
+# 0.3.1 (Thu Oct 20 2022)
+
+#### 🏠 Internal
+
+- Update GitHub Actions action versions [#78](https://github.com/datalad/datalad-fuse/pull/78) ([@jwodder](https://github.com/jwodder))
+
+#### 📝 Documentation
+
+- Fix a typo and overall replace comment with fresh from template [#81](https://github.com/datalad/datalad-fuse/pull/81) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🔩 Dependency Updates
+
+- Don't use fsspec 2022.10.0 [#80](https://github.com/datalad/datalad-fuse/pull/80) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 2
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.3.0 (Tue Jul 05 2022)
 
 #### 🚀 Enhancement
