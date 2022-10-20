@@ -20,9 +20,8 @@ from fuse import FUSE
 from ._version import get_versions
 from .fuse_ import DataLadFUSE
 
-# defines a datalad command suite
-# this symbold must be indentified as a setuptools entrypoint
-# to be found by datalad
+# Defines a datalad command suite.
+# This variable must be bound as a setuptools entrypoint
 command_suite = (
     # description of the command suite, displayed in cmdline help
     "DataLad FUSE command suite",
