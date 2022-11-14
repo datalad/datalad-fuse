@@ -163,7 +163,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                         fsspec_file, timestamp=self._adapter.get_commit_datetime(path)
                     )
                 if to_close:
-                    fsspec_file.close()
+                    try:
+                        fsspec_file.close()
+                    except KeyError:
+                        pass
             else:
                 # TODO: although seems to be logical -- seems to cause logging etc
                 # lgr.error("ENOENTing %s %s", path, fh)
@@ -259,7 +262,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             #  files, so we need to provide some proper use of lru_cache
             #  to have not recently used closed
             if f is not None and not f.closed:
-                f.close()
+                try:
+                    f.close()
+                except KeyError:
+                    pass
         return 0
 
     def readlink(self, path):
