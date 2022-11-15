@@ -165,8 +165,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 if to_close:
                     try:
                         fsspec_file.close()
-                    except KeyError:
-                        pass
+                    except KeyError as e:
+                        lgr.debug("KeyError encountered while closing file: %s", e)
             else:
                 # TODO: although seems to be logical -- seems to cause logging etc
                 # lgr.error("ENOENTing %s %s", path, fh)
@@ -264,8 +264,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             if f is not None and not f.closed:
                 try:
                     f.close()
-                except KeyError:
-                    pass
+                except KeyError as e:
+                    lgr.debug("KeyError encountered while closing file: %s", e)
         return 0
 
     def readlink(self, path):
