@@ -150,7 +150,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 # We should just fabricate stats from the key here or not even
                 # bother???!
                 lgr.debug("File not already open")
-                fsspec_file = self._adapter.open(path)
+                with self.rwlock:
+                    fsspec_file = self._adapter.open(path)
                 to_close = True
             if fsspec_file:
                 if isinstance(fsspec_file, io.BufferedIOBase):
@@ -163,7 +164,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                         fsspec_file, timestamp=self._adapter.get_commit_datetime(path)
                     )
                 if to_close:
-                    fsspec_file.close()
+                    with self.rwlock:
+                        fsspec_file.close()
             else:
                 # TODO: although seems to be logical -- seems to cause logging etc
                 # lgr.error("ENOENTing %s %s", path, fh)
@@ -200,7 +202,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             else:
                 # write/create
                 raise FuseOSError(EROFS)
-            fsspec_file = self._adapter.open(path)
+            with self.rwlock:
+                fsspec_file = self._adapter.open(path)
             lgr.debug("Counter = %d", self._counter)
             # TODO: threadlock ?
             self._fhdict[self._counter] = fsspec_file  # self.fs.open(fn, mode)
@@ -219,8 +222,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             # must be open already and we must have mapped it to fsspec file
             # TODO: check for path to correspond?
             f = self._fhdict[fh]
-            f.seek(offset)
-            return f.read(size)
+            with self.rwlock:
+                f.seek(offset)
+                return f.read(size)
 
     def opendir(self, path):
         lgr.debug("opendir(path=%r)", path)
@@ -259,7 +263,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             #  files, so we need to provide some proper use of lru_cache
             #  to have not recently used closed
             if f is not None and not f.closed:
-                f.close()
+                with self.rwlock:
+                    f.close()
         return 0
 
     def readlink(self, path):
