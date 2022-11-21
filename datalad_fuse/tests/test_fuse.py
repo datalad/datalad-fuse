@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
+import hashlib
 import os.path
 from pathlib import Path
 import subprocess
@@ -231,3 +233,23 @@ def test_fuse_git_status(tmp_path):
             universal_newlines=True,
         )
         assert r.stdout == ""
+
+
+def test_parallel_access(tmp_path, big_url_dataset):
+    ds, data_files = big_url_dataset
+    with fusing(ds.path, tmp_path) as mount:
+        with ThreadPoolExecutor() as pool:
+            futures = {
+                pool.submit(sha256_file, mount / path): dgst
+                for path, dgst in data_files.items()
+            }
+            for fut in as_completed(futures.keys()):
+                assert fut.result() == futures[fut]
+
+
+def sha256_file(path):
+    dgst = hashlib.sha256()
+    with open(path, "rb") as fp:
+        for chunk in iter(lambda: fp.read(65535), b""):
+            dgst.update(chunk)
+    return dgst.hexdigest()

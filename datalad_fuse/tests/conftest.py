@@ -18,6 +18,26 @@ DATA_DIR = Path(__file__).with_name("data")
 
 lgr = logging.getLogger("datalad.fuse.tests")
 
+# We need large files that exceed the blocksize of 1 MiB
+BIG_URLS = [
+    # (dataset path, URL, SHA256 digest)
+    (
+        "APL.pdf",
+        "http://www.softwarepreservation.org/projects/apl/Books/APROGRAMMING%20LANGUAGE",
+        "c65ccc2a97cdb6042641847112dc6e4d4d6e75fdedcd476fdd61f855711bbaf4",
+    ),
+    (
+        "gameboy.pdf",
+        "https://archive.org/download/GameBoyProgManVer1.1/GameBoyProgManVer1.1.pdf",
+        "5263e6c1f5fa51fc6813d2ed71c738c887ec78554eef633ad72c6285f7ff9197",
+    ),
+    (
+        "libpython3.10-stdlib_3.10.4-3_i386.deb",
+        "http://nyc3.clouds.archive.ubuntu.com/ubuntu/pool/main/p/python3.10/libpython3.10-stdlib_3.10.4-3_i386.deb",
+        "e79c1416ec792b61ad9770f855bf6889e57be5f6511ea814d81ef5f9b1a3eec9",
+    ),
+]
+
 
 @pytest.fixture(autouse=True)
 def capture_all_logs(caplog):
@@ -163,3 +183,12 @@ def superdataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U1
     sub = ds.create(dspath / "sub")
     initdataset(sub, served_files, request.param == "remote")
     return (ds, {os.path.join("sub", df.path): df.content for df in served_files})
+
+
+@pytest.fixture
+def big_url_dataset(tmp_home, tmp_path_factory):  # noqa: U100
+    workpath = tmp_path_factory.mktemp("big_url_dataset")
+    ds = Dataset(workpath / "ds").create()
+    for path, url, _ in BIG_URLS:
+        ds.repo.add_url_to_file(path, url, options=["--relaxed"])
+    yield (ds, {path: digest for path, _, digest in BIG_URLS})
