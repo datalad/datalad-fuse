@@ -22,7 +22,7 @@ from .fsspec import FsspecAdapter
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
 # BLOCK_SIZE = 2**20  # 1M. block size to fetch at a time.
-from .utils import is_annex_dir_or_key
+from .utils import AnnexDir, AnnexKey, is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse")
 
@@ -126,17 +126,16 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             else:
                 iadok = is_annex_dir_or_key(path)
                 if iadok is not None:
-                    topdir, dir_or_key = iadok
-                    if dir_or_key == "key":
+                    if isinstance(iadok, AnnexKey):
                         # needs to be open but it is a key. We will let fsspec
                         # to handle it
                         pass
-                    elif dir_or_key == "dir":
+                    elif isinstance(iadok, AnnexDir):
                         # just return that one of the top directory
                         # TODO: cache this since would be a frequent operation
-                        r = self._filter_stat(os.stat(topdir))
+                        r = self._filter_stat(os.stat(iadok.topdir))
                     else:
-                        raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
+                        raise AssertionError(f"Unexpected iadok: {iadok!r}")
                 elif self.is_under_git(path):
                     lgr.debug("Path under .git does not exist; raising ENOENT")
                     raise FuseOSError(ENOENT)

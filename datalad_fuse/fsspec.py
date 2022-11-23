@@ -15,7 +15,7 @@ from fsspec.implementations.cached import CachingFileSystem
 import methodtools
 
 from .consts import CACHE_SIZE
-from .utils import is_annex_dir_or_key
+from .utils import AnnexKey, is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse.fsspec")
 
@@ -57,9 +57,8 @@ class DatasetAdapter:
 
         def handle_path_under_annex_objects(p: Path):
             iadok = is_annex_dir_or_key(p)
-            if iadok is not None and iadok[1] == "key":
-                assert iadok[0] == str(self.path)
-                key = filename2key(p.name)
+            if isinstance(iadok, AnnexKey):
+                key = str(iadok)
                 if p.exists():
                     return (FileState.HAS_CONTENT, key)
                 else:
@@ -254,11 +253,3 @@ class FsspecAdapter:
 
 def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
-
-
-def filename2key(name: str) -> str:
-    # See `keyFile` and `fileKey` in `Annex/Locations.hs` in the git-annex
-    # source
-    return (
-        name.replace("%", "/").replace("&c", ":").replace("&s", "%").replace("&a", "&")
-    )
