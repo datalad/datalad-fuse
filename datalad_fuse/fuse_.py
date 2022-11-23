@@ -22,7 +22,7 @@ from .fsspec import FsspecAdapter
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
 # BLOCK_SIZE = 2**20  # 1M. block size to fetch at a time.
-from .utils import is_annex_dir_or_key
+from .utils import AnnexDir, AnnexKey, is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse")
 
@@ -126,34 +126,48 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             else:
                 iadok = is_annex_dir_or_key(path)
                 if iadok is not None:
-                    topdir, dir_or_key = iadok
-                    if dir_or_key == "key":
-                        # needs to be open but it is a key. We will let fsspec
-                        # to handle it
-                        pass
-                    elif dir_or_key == "dir":
+                    if isinstance(iadok, AnnexKey):
+                        if iadok.size is not None:
+                            lgr.debug("Got size from key")
+                            r = mkstat(
+                                is_file=True,
+                                size=iadok.size,
+                                timestamp=self._adapter.get_commit_datetime(path),
+                            )
+                        else:
+                            # needs to be open but it is a key. We will let
+                            # fsspec handle it
+                            pass
+                    elif isinstance(iadok, AnnexDir):
                         # just return that one of the top directory
                         # TODO: cache this since would be a frequent operation
-                        r = self._filter_stat(os.stat(topdir))
+                        r = self._filter_stat(os.stat(iadok.topdir))
                     else:
-                        raise AssertionError(f"Unexpected dir_or_key: {dir_or_key!r}")
+                        raise AssertionError(f"Unexpected iadok: {iadok!r}")
                 elif self.is_under_git(path):
                     lgr.debug("Path under .git does not exist; raising ENOENT")
                     raise FuseOSError(ENOENT)
         if r is None:
+            fsspec_file = None
             if fh and fh >= self._counter_offset:
                 lgr.debug("File already open")
                 fsspec_file = self._fhdict[fh]
                 to_close = False
             else:
-                # TODO: it is expensive to open each file just for `getattr`!
-                # We should just fabricate stats from the key here or not even
-                # bother???!
-                lgr.debug("File not already open")
-                with self.rwlock:
-                    fsspec_file = self._adapter.open(path)
-                to_close = True
-            if fsspec_file:
+                _, key = self._adapter.get_file_state(path)
+                if key.size is not None:
+                    lgr.debug("Got size from key")
+                    r = mkstat(
+                        is_file=True,
+                        size=key.size,
+                        timestamp=self._adapter.get_commit_datetime(path),
+                    )
+                else:
+                    lgr.debug("File not already open")
+                    with self.rwlock:
+                        fsspec_file = self._adapter.open(path)
+                    to_close = True
+            if fsspec_file is not None:
                 if isinstance(fsspec_file, io.BufferedIOBase):
                     # full file was already fetched locally
                     lgr.debug("File object is io.BufferedIOBase")
@@ -166,12 +180,6 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 if to_close:
                     with self.rwlock:
                         fsspec_file.close()
-            else:
-                # TODO: although seems to be logical -- seems to cause logging etc
-                # lgr.error("ENOENTing %s %s", path, fh)
-                # raise FuseOSError(ENOENT)
-                lgr.debug("File failed to open???")
-                r = {}  # we have nothing to say.  TODO: proper return/error?
         lgr.debug("Returning %r for %s", r, path)
         return r
 
@@ -377,16 +385,20 @@ def file_getattr(f, timestamp: datetime):
         info = f.info()
     except FileNotFoundError:
         raise FuseOSError(ENOENT)
+    return mkstat(info["type"] == "file", info["size"], timestamp)
+
+
+def mkstat(is_file: bool, size: int, timestamp: datetime) -> dict:
     # TODO Also I get UID.GID funny -- yarik, not yoh
     # get of the original symlink, so float it up!
     data = {"st_uid": os.getuid(), "st_gid": os.getgid()}
-    if info["type"] != "file":
+    if not is_file:
         data["st_mode"] = stat.S_IFDIR | 0o755
         data["st_size"] = 0
         data["st_blksize"] = 0
     else:
         data["st_mode"] = stat.S_IFREG | 0o644
-        data["st_size"] = info["size"]
+        data["st_size"] = size
         data["st_blksize"] = 5 * 2**20
         data["st_nlink"] = 1
     data["st_atime"] = timestamp.timestamp()
