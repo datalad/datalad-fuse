@@ -51,18 +51,17 @@ class DatasetAdapter:
             self.annex._batched.clear()
 
     @methodtools.lru_cache(maxsize=CACHE_SIZE)
-    def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[str]]:
+    def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[AnnexKey]]:
         p = self.path / relpath
         lgr.debug("get_file_state: %s", relpath)
 
         def handle_path_under_annex_objects(p: Path):
             iadok = is_annex_dir_or_key(p)
             if isinstance(iadok, AnnexKey):
-                key = str(iadok)
                 if p.exists():
-                    return (FileState.HAS_CONTENT, key)
+                    return (FileState.HAS_CONTENT, iadok)
                 else:
-                    return (FileState.NO_CONTENT, key)
+                    return (FileState.NO_CONTENT, iadok)
             else:
                 return (FileState.NOT_ANNEXED, None)
 
@@ -74,7 +73,7 @@ class DatasetAdapter:
         if not p.is_symlink():
             if p.stat().st_size < 1024 and self.annex is not None:
                 if self.annex.is_under_annex(relpath, batch=True):
-                    key = self.annex.get_file_key(relpath, batch=True)
+                    key = AnnexKey.parse(self.annex.get_file_key(relpath, batch=True))
                     if self.annex.file_has_content(relpath, batch=True):
                         return (FileState.HAS_CONTENT, key)
                     else:
@@ -162,7 +161,7 @@ class DatasetAdapter:
             )
         if fstate is FileState.NO_CONTENT:
             lgr.debug("%s: opening via fsspec", relpath)
-            for url in self.get_urls(key):
+            for url in self.get_urls(str(key)):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", relpath, url)
                     return self.fs.open(url, mode, **kwargs)
@@ -240,6 +239,12 @@ class FsspecAdapter:
             "%s: path resolved to %s in dataset at %s", filepath, relpath, dsap.path
         )
         return dsap.open(relpath, mode=mode, encoding=encoding, errors=errors)
+
+    def get_file_state(
+        self, filepath: Union[str, Path]
+    ) -> Tuple[FileState, Optional[AnnexKey]]:
+        dsap, relpath = self.resolve_dataset(filepath)
+        return dsap.get_file_state(relpath)
 
     def is_under_annex(self, filepath: Union[str, Path]) -> bool:
         dsap, relpath = self.resolve_dataset(filepath)

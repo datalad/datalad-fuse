@@ -57,6 +57,7 @@ def test_fuse(tmp_path, transparent, url_dataset):
     with fusing(ds.path, tmp_path, transparent=transparent) as mount:
         assert sorted(q.name for q in mount.iterdir()) == dots + sorted(data_files)
         for fname, blob in data_files.items():
+            assert os.path.getsize(mount / fname) == len(blob)
             assert (mount / fname).read_bytes() == blob
 
 
