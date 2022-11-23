@@ -1,3 +1,25 @@
+# 0.4.0 (Wed Nov 23 2022)
+
+#### 🚀 Enhancement
+
+- Update Python and DataLad versions [#85](https://github.com/datalad/datalad-fuse/pull/85) ([@jwodder](https://github.com/jwodder))
+- Run tests also on cron and push (all branches for now) [#85](https://github.com/datalad/datalad-fuse/pull/85) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🐛 Bug Fix
+
+- Add locks around fsspec operations [#83](https://github.com/datalad/datalad-fuse/pull/83) ([@jwodder](https://github.com/jwodder))
+
+#### 🏎 Performance
+
+- Get size of annexed files from keys where possible [#86](https://github.com/datalad/datalad-fuse/pull/86) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 2
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.3.1 (Thu Oct 20 2022)
 
 #### 🏠 Internal
