@@ -28,7 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.6
+          python-version: 3.7
 
       - name: Install dependencies
         run: |
@@ -52,13 +52,13 @@ jobs:
           git update-ref refs/bm/merge-target HEAD^1
 
       - name: Run benchmarks on newest code
-        run: asv run --strict --show-stderr --python 3.6 HEAD^-1
+        run: asv run --strict --show-stderr --python 3.7 HEAD^-1
 
       - name: Check out previous code
         run: git checkout --force refs/bm/merge-target
 
       - name: Run benchmarks on previous code
-        run: asv run --strict --show-stderr --python 3.6 HEAD^-1
+        run: asv run --strict --show-stderr --python 3.7 HEAD^-1
 
       - name: Compare benchmarks on previous & newest code
         run: asv compare refs/bm/merge-target refs/bm/pr
