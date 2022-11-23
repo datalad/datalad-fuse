@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 
 from datalad.api import Dataset
-from datalad.tests.utils import assert_in_results
+from datalad.tests.utils_pytest import assert_in_results
 from linesep import split_terminated
 import pytest
 
