@@ -164,8 +164,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                     )
                 else:
                     lgr.debug("File not already open")
-                    with self.rwlock:
-                        fsspec_file = self._adapter.open(path)
+                    fsspec_file = self._adapter.open(path)
                     to_close = True
             if fsspec_file is not None:
                 if isinstance(fsspec_file, io.BufferedIOBase):
@@ -178,8 +177,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                         fsspec_file, timestamp=self._adapter.get_commit_datetime(path)
                     )
                 if to_close:
-                    with self.rwlock:
-                        fsspec_file.close()
+                    fsspec_file.close()
         lgr.debug("Returning %r for %s", r, path)
         return r
 
@@ -210,8 +208,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             else:
                 # write/create
                 raise FuseOSError(EROFS)
-            with self.rwlock:
-                fsspec_file = self._adapter.open(path)
+            fsspec_file = self._adapter.open(path)
             lgr.debug("Counter = %d", self._counter)
             # TODO: threadlock ?
             self._fhdict[self._counter] = fsspec_file  # self.fs.open(fn, mode)
@@ -230,9 +227,8 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             # must be open already and we must have mapped it to fsspec file
             # TODO: check for path to correspond?
             f = self._fhdict[fh]
-            with self.rwlock:
-                f.seek(offset)
-                return f.read(size)
+            f.seek(offset)
+            return f.read(size)
 
     def opendir(self, path):
         lgr.debug("opendir(path=%r)", path)
@@ -271,8 +267,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             #  files, so we need to provide some proper use of lru_cache
             #  to have not recently used closed
             if f is not None and not f.closed:
-                with self.rwlock:
-                    f.close()
+                f.close()
         return 0
 
     def readlink(self, path):
