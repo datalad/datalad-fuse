@@ -15,10 +15,8 @@ from datalad.interface.results import get_status_dict
 from datalad.interface.utils import eval_results
 from datalad.support.constraints import EnsureNone
 from datalad.support.param import Parameter
-from fuse import FUSE
 
 from ._version import get_versions
-from .fuse_ import DataLadFUSE
 
 # Defines a datalad command suite.
 # This variable must be bound as a setuptools entrypoint
@@ -107,6 +105,10 @@ class FuseFS(Interface):
         mode_transparent: bool = False,
         allow_other: bool = False,
     ) -> Iterator[Dict[str, Any]]:
+        from fuse import FUSE
+
+        from .fuse_ import DataLadFUSE
+
         if not foreground:
             yield get_status_dict(
                 action="fusefs",
