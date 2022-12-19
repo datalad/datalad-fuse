@@ -1,3 +1,20 @@
+# 0.4.1 (Mon Dec 19 2022)
+
+#### 🐛 Bug Fix
+
+- Support importing when FUSE is not installed [#91](https://github.com/datalad/datalad-fuse/pull/91) ([@jwodder](https://github.com/jwodder))
+
+#### 📝 Documentation
+
+- DOC: note that we need 3.7 not 3.6 [#92](https://github.com/datalad/datalad-fuse/pull/92) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 2
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.4.0 (Wed Nov 23 2022)
 
 #### 🚀 Enhancement
