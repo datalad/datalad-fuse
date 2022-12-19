@@ -10,7 +10,7 @@ and locally cache the files as needed.
 
 ## Installation
 
-`datalad-fuse` requires Python 3.6 or higher.  Just use
+Current version of `datalad-fuse` requires Python 3.7 or higher.  Just use
 [pip](https://pip.pypa.io) for Python 3 (You have pip, right?) to install it:
 
     python3 -m pip install datalad-fuse
