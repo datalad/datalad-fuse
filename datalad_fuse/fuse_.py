@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from ctypes import CDLL, c_int, c_void_p
 from ctypes.util import find_library
 from datetime import datetime
@@ -9,7 +12,9 @@ import os
 import os.path as op
 from pathlib import Path
 import stat
+import sys
 from threading import Lock
+from typing import IO, Any, Optional, TypeVar
 
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
@@ -24,6 +29,11 @@ from .fsspec import FsspecAdapter
 # BLOCK_SIZE = 2**20  # 1M. block size to fetch at a time.
 from .utils import AnnexDir, AnnexKey, is_annex_dir_or_key
 
+if sys.version_info[:2] >= (3, 10):
+    from typing import Concatenate, ParamSpec
+else:
+    from typing_extensions import Concatenate, ParamSpec
+
 lgr = logging.getLogger("datalad.fuse")
 
 libcname = find_library("c")
@@ -34,12 +44,17 @@ fcntl = libc.fcntl
 fcntl.argtypes = [c_int, c_int, c_void_p]
 fcntl.restype = c_int
 
+T = TypeVar("T")
+P = ParamSpec("P")
 
-def write_op(f):
+
+def write_op(
+    f: Callable[Concatenate[DataLadFUSE, str, P], T]
+) -> Callable[Concatenate[DataLadFUSE, str, P], T]:
     """Decorator for operations which need to write"""
 
     @wraps(f)
-    def wrapped(self, path, *args, **kwargs):
+    def wrapped(self: DataLadFUSE, path: str, *args: P.args, **kwargs: P.kwargs) -> T:
         if self.mode_transparent and self.is_under_git(path):
             return f(self, path, *args, **kwargs)
         else:
@@ -54,18 +69,18 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     _counter_offset = 1000
 
-    def __init__(self, root, mode_transparent=False):
+    def __init__(self, root: str, mode_transparent: bool = False) -> None:
         self.root = op.realpath(root)
         self.mode_transparent = mode_transparent
         self.rwlock = Lock()
         self._adapter = FsspecAdapter(root, mode_transparent=mode_transparent)
-        self._fhdict = {}
+        self._fhdict: dict[int, Optional[IO[bytes]]] = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
         # and there is no seek so we should be ok even if the same file open
         # multiple times?
         self._counter = DataLadFUSE._counter_offset
 
-    def __call__(self, op, path, *args):
+    def __call__(self, op: str, path: str, *args: Any) -> Any:
         lgr.debug("op=%s for path=%s with args %s", op, path, args)
         # if (".git", "annex", "objects") == Path(path).parts[-7:-4]:
         #     import pdb; pdb.set_trace()
@@ -74,7 +89,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             raise FuseOSError(ENOENT)
         return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
 
-    def destroy(self, _path=None):
+    def destroy(self, _path: Optional[str] = None) -> int:
         lgr.warning("Destroying fsspecs and collection of %d fhs", len(self._fhdict))
         for f in self._fhdict.values():
             if f is not None:
@@ -93,7 +108,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     @staticmethod
     # XXX not yet sure what we need to filter...
-    def _filter_stat(st):
+    def _filter_stat(st: os.stat_result) -> dict[str, Any]:
         return dict(
             (key, getattr(st, key))
             for key in (
@@ -109,10 +124,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         )
 
     @methodtools.lru_cache(maxsize=CACHE_SIZE)
-    def getattr(self, path, fh=None):
+    def getattr(self, path: str, fh: Optional[int] = None) -> dict[str, Any]:
         # TODO: support of unlocked files... but at what cost?
         lgr.debug("getattr(path=%r, fh=%r)", path, fh)
-        r = None
+        r: Optional[dict[str, Any]] = None
         if fh and fh < self._counter_offset:
             lgr.debug("Calling os.fstat()")
             r = self._filter_stat(os.fstat(fh))
@@ -155,6 +170,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 to_close = False
             else:
                 _, key = self._adapter.get_file_state(path)
+                assert key is not None
                 if key.size is not None:
                     lgr.debug("Got size from key")
                     r = mkstat(
@@ -181,9 +197,10 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                     with self.rwlock:
                         fsspec_file.close()
         lgr.debug("Returning %r for %s", r, path)
+        assert r is not None
         return r
 
-    def open(self, path, flags):
+    def open(self, path: str, flags: int) -> int:
         lgr.debug("open(path=%r, flags=%#x)", path, flags)
         # fn = "".join([self.root, path.lstrip("/")])
         if op.exists(path) or (
@@ -218,7 +235,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             self._counter += 1
             return self._counter - 1
 
-    def read(self, _path, size, offset, fh):
+    def read(self, _path: str, size: int, offset: int, fh: int) -> bytes:
         lgr.debug("read(path=%r, size=%r, offset=%r, fh=%r)", _path, size, offset, fh)
         if fh < self._counter_offset:
             lgr.debug("Reading directly")
@@ -230,11 +247,12 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
             # must be open already and we must have mapped it to fsspec file
             # TODO: check for path to correspond?
             f = self._fhdict[fh]
+            assert f is not None
             with self.rwlock:
                 f.seek(offset)
                 return f.read(size)
 
-    def opendir(self, path):
+    def opendir(self, path: str) -> int:
         lgr.debug("opendir(path=%r)", path)
         if not op.exists(path):
             lgr.debug("Directory does not exist; raising ENOENT")
@@ -245,7 +263,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         self._counter += 1
         return self._counter - 1
 
-    def readdir(self, path, _fh):
+    def readdir(self, path: str, _fh: int) -> list[str]:
         lgr.debug("readdir(path=%r, fh=%r)", path, _fh)
         paths = [".", ".."] + os.listdir(path)
         if not self.mode_transparent:
@@ -257,7 +275,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                 lgr.debug("Removed .git from dirlist")
         return paths
 
-    def release(self, path, fh):
+    def release(self, path: str, fh: int) -> int:
         lgr.debug("release(path=%r, fh=%r)", path, fh)
         if fh < self._counter_offset:
             lgr.debug("Closing directly")
@@ -275,7 +293,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                     f.close()
         return 0
 
-    def readlink(self, path):
+    def readlink(self, path: str) -> str:
         lgr.debug("readlink(path=%r)", path)
         return os.readlink(path)
 
@@ -290,20 +308,20 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     chmod = os.chmod
     chown = os.chown
 
-    def flush(self, _path, fh):
+    def flush(self, _path: str, fh: int) -> None:
         lgr.debug("flush(path=%r, fh=%r)", _path, fh)
         if fh < self._counter_offset:
             lgr.debug("Flushing directly")
-            return os.fsync(fh)
+            os.fsync(fh)
 
-    def fsync(self, _path, datasync, fh):
+    def fsync(self, _path: str, datasync: int, fh: int) -> None:
         lgr.debug("fsync(path=%r, datasync=%r, fh=%r)", _path, datasync, fh)
         if fh < self._counter_offset:
             lgr.debug("Fsyncing directly")
             if datasync != 0:
-                return os.fdatasync(fh)
+                os.fdatasync(fh)  # type: ignore[attr-defined]
             else:
-                return os.fsync(fh)
+                os.fsync(fh)
 
     #
     # Extra operations we do not have implemented
@@ -319,24 +337,24 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     #
 
     @write_op
-    def create(self, path, mode):
+    def create(self, path: str, mode: int) -> int:
         return os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
 
     @write_op
-    def link(self, target, source):
+    def link(self, target: str, source: str) -> None:
         if "/.git/" in source:
-            return os.link(self.root + source, target)
+            os.link(self.root + source, target)
         else:
             raise FuseOSError(EROFS)
 
     @write_op
-    def rename(self, old, new):
+    def rename(self, old: str, new: str) -> None:
         if "/.git/" in new:
-            return os.rename(old, self.root + new)
+            os.rename(old, self.root + new)
         else:
             raise FuseOSError(EROFS)
 
-    # def statfs(self, path):
+    # def statfs(self, path: str) -> dict[str, Any]:
     #     lgr.mydebug(f"statfs {path}")
     #     raise NotImplementedError()
     #     stv = os.statvfs(path)
@@ -345,40 +363,42 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     #         'f_ffree', 'f_files', 'f_flag', 'f_frsize', 'f_namemax'))
 
     @write_op
-    def symlink(self, target, source):
-        return os.symlink(source, target)
+    def symlink(self, target: str, source: str) -> None:
+        os.symlink(source, target)
 
     @write_op
-    def truncate(self, path, length, _fh=None):
+    def truncate(self, path: str, length: int, _fh: Optional[int] = None) -> None:
         with open(path, "r+") as f:
             f.truncate(length)
 
     @write_op
-    def unlink(self, path):
+    def unlink(self, path: str) -> None:
         with self.rwlock:
-            return os.unlink(path)
+            os.unlink(path)
 
-    def utimens(self, path, times=None):
+    def utimens(self, path: str, times: Optional[tuple[int, int]] = None) -> None:
         if times is not None:
-            return os.utime(path, ns=times)
+            os.utime(path, ns=times)
         else:
-            return os.utime(path)
+            os.utime(path)
 
     @write_op
-    def write(self, _path, data, offset, fh):
+    def write(self, _path: str, data: bytes, offset: int, fh: int) -> int:
         with self.rwlock:
             os.lseek(fh, offset, 0)
             return os.write(fh, data)
 
     @write_op
-    def lock(self, _path, fh, cmd, lock):
-        return fcntl(fh, cmd, lock)
+    def lock(self, _path: str, fh: int, cmd: int, lock: int) -> int:
+        r = fcntl(fh, cmd, lock)
+        assert isinstance(r, int)
+        return r
 
-    def is_under_git(self, path):
+    def is_under_git(self, path: str) -> bool:
         return ".git" in Path(path).relative_to(self.root).parts
 
 
-def file_getattr(f, timestamp: datetime):
+def file_getattr(f: Any, timestamp: datetime) -> dict[str, Any]:
     # code borrowed from fsspec.fuse:FUSEr.getattr
     # TODO: improve upon! there might be mtime of url
     try:
@@ -388,10 +408,10 @@ def file_getattr(f, timestamp: datetime):
     return mkstat(info["type"] == "file", info["size"], timestamp)
 
 
-def mkstat(is_file: bool, size: int, timestamp: datetime) -> dict:
+def mkstat(is_file: bool, size: int, timestamp: datetime) -> dict[str, Any]:
     # TODO Also I get UID.GID funny -- yarik, not yoh
     # get of the original symlink, so float it up!
-    data = {"st_uid": os.getuid(), "st_gid": os.getgid()}
+    data: dict[str, Any] = {"st_uid": os.getuid(), "st_gid": os.getgid()}
     if not is_file:
         data["st_mode"] = stat.S_IFDIR | 0o755
         data["st_size"] = 0

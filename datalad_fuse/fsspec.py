@@ -1,10 +1,14 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from enum import Enum
 import logging
 import os
 import os.path
 from pathlib import Path
-from typing import IO, Dict, Iterator, Optional, Tuple, Union
+from types import TracebackType
+from typing import IO, Optional, Tuple, cast
 
 from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
@@ -23,7 +27,7 @@ FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 
 
 class DatasetAdapter:
-    def __init__(self, path: Union[str, Path], mode_transparent: bool = False) -> None:
+    def __init__(self, path: str | Path, mode_transparent: bool = False) -> None:
         self.path = Path(path)
         self.mode_transparent = mode_transparent
         ds = Dataset(path)
@@ -51,11 +55,13 @@ class DatasetAdapter:
             self.annex._batched.clear()
 
     @methodtools.lru_cache(maxsize=CACHE_SIZE)
-    def get_file_state(self, relpath: str) -> Tuple[FileState, Optional[AnnexKey]]:
+    def get_file_state(self, relpath: str) -> tuple[FileState, Optional[AnnexKey]]:
         p = self.path / relpath
         lgr.debug("get_file_state: %s", relpath)
 
-        def handle_path_under_annex_objects(p: Path):
+        def handle_path_under_annex_objects(
+            p: Path,
+        ) -> tuple[FileState, Optional[AnnexKey]]:
             iadok = is_annex_dir_or_key(p)
             if isinstance(iadok, AnnexKey):
                 if p.exists():
@@ -164,7 +170,7 @@ class DatasetAdapter:
             for url in self.get_urls(str(key)):
                 try:
                     lgr.debug("%s: Attempting to open via URL %s", relpath, url)
-                    return self.fs.open(url, mode, **kwargs)
+                    return self.fs.open(url, mode, **kwargs)  # type: ignore
                 except BlocksizeMismatchError as e:
                     lgr.warning(
                         "%s: Blocksize mismatch: %s; deleting cached file and"
@@ -173,7 +179,7 @@ class DatasetAdapter:
                         e,
                     )
                     self.fs.pop_from_cache(url)
-                    return self.fs.open(url, mode, **kwargs)
+                    return self.fs.open(url, mode, **kwargs)  # type: ignore
                 except FileNotFoundError as e:
                     lgr.debug(
                         "Failed to open file %s at URL %s: %s", relpath, url, str(e)
@@ -181,22 +187,27 @@ class DatasetAdapter:
             raise IOError(f"Could not find a usable URL for {relpath}")
         else:
             lgr.debug("%s: opening directly", relpath)
-            return open(self.path / relpath, mode, **kwargs)
+            return open(self.path / relpath, mode, **kwargs)  # type: ignore
 
     def clear(self) -> None:
         self.fs.clear_cache()
 
 
 class FsspecAdapter:
-    def __init__(self, root: Union[str, Path], mode_transparent: bool = False) -> None:
+    def __init__(self, root: str | Path, mode_transparent: bool = False) -> None:
         self.root = Path(root)
         self.mode_transparent = mode_transparent
-        self.datasets: Dict[Path, DatasetAdapter] = {}
+        self.datasets: dict[Path, DatasetAdapter] = {}
 
-    def __enter__(self):
+    def __enter__(self) -> FsspecAdapter:
         return self
 
-    def __exit__(self, _exc_type, _exc_val, _exc_tb):
+    def __exit__(
+        self,
+        _exc_type: Optional[type[BaseException]],
+        _exc_val: Optional[BaseException],
+        _exc_tb: Optional[TracebackType],
+    ) -> None:
         for ds in self.datasets.values():
             ds.close()
         self.datasets.clear()
@@ -204,19 +215,20 @@ class FsspecAdapter:
     @methodtools.lru_cache(maxsize=CACHE_SIZE)
     # TODO: optimize "caching" more since for all files under the same directory
     # they all would belong to the same dataset
-    def get_dataset_path(self, path: Union[str, Path]) -> Path:
+    def get_dataset_path(self, path: str | Path) -> Path:
         path = Path(self.root, path)
         dspath = get_dataset_root(path)
         if dspath is None:
             raise ValueError(f"Path not under DataLad: {path}")
         dspath = Path(dspath)
+        assert isinstance(dspath, Path)
         try:
             dspath.relative_to(self.root)
         except ValueError:
             raise ValueError(f"Path not under root dataset: {path}")
         return dspath
 
-    def resolve_dataset(self, filepath: Union[str, Path]) -> Tuple[DatasetAdapter, str]:
+    def resolve_dataset(self, filepath: str | Path) -> tuple[DatasetAdapter, str]:
         dspath = self.get_dataset_path(filepath)
         try:
             dsap = self.datasets[dspath]
@@ -229,7 +241,7 @@ class FsspecAdapter:
 
     def open(
         self,
-        filepath: Union[str, Path],
+        filepath: str | Path,
         mode: str = "rb",
         encoding: str = "utf-8",
         errors: Optional[str] = None,
@@ -241,17 +253,17 @@ class FsspecAdapter:
         return dsap.open(relpath, mode=mode, encoding=encoding, errors=errors)
 
     def get_file_state(
-        self, filepath: Union[str, Path]
-    ) -> Tuple[FileState, Optional[AnnexKey]]:
+        self, filepath: str | Path
+    ) -> tuple[FileState, Optional[AnnexKey]]:
         dsap, relpath = self.resolve_dataset(filepath)
-        return dsap.get_file_state(relpath)
+        return cast(Tuple[FileState, Optional[AnnexKey]], dsap.get_file_state(relpath))
 
-    def is_under_annex(self, filepath: Union[str, Path]) -> bool:
+    def is_under_annex(self, filepath: str | Path) -> bool:
         dsap, relpath = self.resolve_dataset(filepath)
         fstate, _ = dsap.get_file_state(relpath)
         return fstate is not FileState.NOT_ANNEXED
 
-    def get_commit_datetime(self, filepath: Union[str, Path]) -> datetime:
+    def get_commit_datetime(self, filepath: str | Path) -> datetime:
         dsap, _ = self.resolve_dataset(filepath)
         return dsap.commit_dt
 
