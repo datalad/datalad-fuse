@@ -7,15 +7,17 @@ import logging
 import os
 import os.path
 from pathlib import Path
-from types import TracebackType
-from typing import IO, Optional, Tuple, cast
+from types import SimpleNamespace, TracebackType
+from typing import IO, Any, Optional, Tuple, cast
 
+import aiohttp
+from aiohttp_retry import ListRetry, RetryClient
 from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
 from datalad.utils import get_dataset_root
-import fsspec
 from fsspec.exceptions import BlocksizeMismatchError
 from fsspec.implementations.cached import CachingFileSystem
+from fsspec.implementations.http import HTTPFileSystem
 import methodtools
 
 from .consts import CACHE_SIZE
@@ -40,7 +42,7 @@ class DatasetAdapter:
             ds.repo.get_commit_date(), tz=timezone.utc
         )
         self.fs = CachingFileSystem(
-            fs=fsspec.filesystem("http"),
+            fs=HTTPFileSystem(get_client=get_client),
             # target_protocol='blockcache',
             cache_storage=os.path.join(path, ".git", "datalad", "cache", "fsspec"),
             # cache_check=600,
@@ -270,3 +272,24 @@ class FsspecAdapter:
 
 def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
+
+
+async def on_request_start(
+    _session: aiohttp.ClientSession,
+    trace_config_ctx: SimpleNamespace,
+    params: aiohttp.TraceRequestStartParams,
+) -> None:
+    if trace_config_ctx.trace_request_ctx["current_attempt"] > 1:
+        lgr.warning("Retrying request to %s", params.url)
+
+
+async def get_client(**kwargs: Any) -> RetryClient:
+    trace_config = aiohttp.TraceConfig()
+    trace_config.on_request_start.append(on_request_start)
+    return RetryClient(
+        client_session=aiohttp.ClientSession(
+            trace_configs=[trace_config],
+            **kwargs,
+        ),
+        retry_options=ListRetry(timeouts=[1, 2, 6, 15, 36]),
+    )
