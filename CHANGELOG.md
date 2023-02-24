@@ -1,3 +1,21 @@
+# 0.4.2 (Fri Feb 24 2023)
+
+#### 🐛 Bug Fix
+
+- Inform also under what dataset path we cannot find a url for a key [#97](https://github.com/datalad/datalad-fuse/pull/97) ([@yarikoptic](https://github.com/yarikoptic))
+- Retry HTTP 5xx errors [#96](https://github.com/datalad/datalad-fuse/pull/96) ([@jwodder](https://github.com/jwodder))
+
+#### 🧪 Tests
+
+- Basic type-checking [#95](https://github.com/datalad/datalad-fuse/pull/95) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 2
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.4.1 (Mon Dec 19 2022)
 
 #### 🐛 Bug Fix
