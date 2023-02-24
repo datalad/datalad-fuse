@@ -186,7 +186,9 @@ class DatasetAdapter:
                     lgr.debug(
                         "Failed to open file %s at URL %s: %s", relpath, url, str(e)
                     )
-            raise IOError(f"Could not find a usable URL for {relpath}")
+            raise IOError(
+                f"Could not find a usable URL for {relpath} within {self.path}"
+            )
         else:
             lgr.debug("%s: opening directly", relpath)
             return open(self.path / relpath, mode, **kwargs)  # type: ignore
