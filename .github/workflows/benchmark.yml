@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip wheel
-          python -m pip install --upgrade asv virtualenv
+          python -m pip install --upgrade 'asv[virtualenv]'
 
       - name: Set up machine profile
         run: asv machine --yes
@@ -52,13 +52,13 @@ jobs:
           git update-ref refs/bm/merge-target HEAD^1
 
       - name: Run benchmarks on newest code
-        run: asv run --strict --show-stderr --python 3.7 HEAD^-1
+        run: asv run --show-stderr --python 3.7 HEAD^-1
 
       - name: Check out previous code
         run: git checkout --force refs/bm/merge-target
 
       - name: Run benchmarks on previous code
-        run: asv run --strict --show-stderr --python 3.7 HEAD^-1
+        run: asv run --show-stderr --python 3.7 HEAD^-1
 
       - name: Compare benchmarks on previous & newest code
         run: asv compare refs/bm/merge-target refs/bm/pr

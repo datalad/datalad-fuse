@@ -184,9 +184,9 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
                         fsspec_file = self._adapter.open(path)
                     to_close = True
             if fsspec_file is not None:
-                if isinstance(fsspec_file, io.BufferedIOBase):
+                if isinstance(fsspec_file, io.BufferedIOBase):  # type: ignore[unreachable]
                     # full file was already fetched locally
-                    lgr.debug("File object is io.BufferedIOBase")
+                    lgr.debug("File object is io.BufferedIOBase")  # type: ignore[unreachable]
                     r = self._filter_stat(os.stat(fsspec_file.name))
                 else:
                     lgr.debug("File object is fsspec object")
