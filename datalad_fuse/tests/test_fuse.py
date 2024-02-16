@@ -18,12 +18,14 @@ def fusing(
     mount_dir: Path,
     transparent: bool = False,
     wait: bool = False,
+    caching: bool = False,
 ) -> Iterator[Path]:
     mount_dir.mkdir(parents=True, exist_ok=True)
+    opts = []
     if transparent:
-        opts = ["--mode-transparent"]
-    else:
-        opts = []
+        opts.append("--mode-transparent")
+    if caching:
+        opts.append("--caching=ondisk")
     p = subprocess.Popen(
         [
             "datalad",
@@ -74,7 +76,9 @@ def test_fuse_subdataset(tmp_path, superdataset, cache_clear, transparent, tmp_h
         dots = [".datalad", ".git", ".gitattributes"]
     else:
         dots = [".datalad", ".gitattributes"]
-    with fusing(ds.path, tmp_path, transparent=transparent, wait=True) as mount:
+    with fusing(
+        ds.path, tmp_path, caching=True, transparent=transparent, wait=True
+    ) as mount:
         assert sorted(q.name for q in mount.iterdir()) == dots + [".gitmodules", "sub"]
         assert sorted(q.name for q in (mount / "sub").iterdir()) == dots + sorted(
             os.path.relpath(fname, "sub") for fname in data_files
