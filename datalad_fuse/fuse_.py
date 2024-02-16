@@ -69,11 +69,15 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     _counter_offset = 1000
 
-    def __init__(self, root: str, mode_transparent: bool = False) -> None:
+    def __init__(
+        self, root: str, caching: bool, mode_transparent: bool = False
+    ) -> None:
         self.root = op.realpath(root)
         self.mode_transparent = mode_transparent
         self.rwlock = Lock()
-        self._adapter = FsspecAdapter(root, mode_transparent=mode_transparent)
+        self._adapter = FsspecAdapter(
+            root, mode_transparent=mode_transparent, caching=caching
+        )
         self._fhdict: dict[int, Optional[IO[bytes]]] = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
         # and there is no seek so we should be ok even if the same file open

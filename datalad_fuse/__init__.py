@@ -1,5 +1,7 @@
 """DataLad FUSE extension"""
 
+from __future__ import annotations
+
 __docformat__ = "restructuredtext"
 
 from typing import Any, Dict, Iterator, Optional
@@ -89,6 +91,12 @@ class FuseFS(Interface):
             action="store_true",
             doc="Expose .git directory",
         ),
+        "caching": Parameter(
+            args=("--caching",),
+            choices=["none", "ondisk"],
+            default="none",
+            doc="Whether to cache fsspec'ed files on disk on not at all",
+        ),
         # TODO: (might better become config vars?)
         # --cache=persist
         # --recursive=follow,get - encountering submodule might install it first
@@ -104,6 +112,7 @@ class FuseFS(Interface):
         foreground: bool = False,
         mode_transparent: bool = False,
         allow_other: bool = False,
+        caching: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
         from fuse import FUSE
 
@@ -121,7 +130,11 @@ class FuseFS(Interface):
             dataset, purpose="mount as FUSE system", check_installed=True
         )
         FUSE(
-            DataLadFUSE(ds.path, mode_transparent=mode_transparent),
+            DataLadFUSE(
+                ds.path,
+                mode_transparent=mode_transparent,
+                caching=caching == "ondisk",
+            ),
             mount_path,
             foreground=foreground,
             allow_other=allow_other,
