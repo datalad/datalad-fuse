@@ -50,13 +50,14 @@ def fusing(
 
 
 @pytest.mark.parametrize("transparent", [False, True])
-def test_fuse(tmp_path, transparent, url_dataset):
+@pytest.mark.parametrize("caching", [False, True])
+def test_fuse(tmp_path, transparent, caching, url_dataset):
     ds, data_files = url_dataset
     if transparent:
         dots = [".datalad", ".git", ".gitattributes"]
     else:
         dots = [".datalad", ".gitattributes"]
-    with fusing(ds.path, tmp_path, transparent=transparent) as mount:
+    with fusing(ds.path, tmp_path, transparent=transparent, caching=caching) as mount:
         assert sorted(q.name for q in mount.iterdir()) == dots + sorted(data_files)
         for fname, blob in data_files.items():
             assert os.path.getsize(mount / fname) == len(blob)
