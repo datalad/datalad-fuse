@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip wheel
-          python -m pip install --upgrade 'asv[virtualenv]'
+          python -m pip install --upgrade 'asv[virtualenv] != 0.6.2'
 
       - name: Set up machine profile
         run: asv machine --yes
