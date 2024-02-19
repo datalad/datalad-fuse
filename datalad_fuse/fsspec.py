@@ -29,7 +29,9 @@ FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 
 
 class DatasetAdapter:
-    def __init__(self, path: str | Path, mode_transparent: bool = False) -> None:
+    def __init__(
+        self, path: str | Path, caching: bool, mode_transparent: bool = False
+    ) -> None:
         self.path = Path(path)
         self.mode_transparent = mode_transparent
         ds = Dataset(path)
@@ -41,16 +43,21 @@ class DatasetAdapter:
         self.commit_dt = datetime.fromtimestamp(
             ds.repo.get_commit_date(), tz=timezone.utc
         )
-        self.fs = CachingFileSystem(
-            fs=HTTPFileSystem(get_client=get_client),
-            # target_protocol='blockcache',
-            cache_storage=os.path.join(path, ".git", "datalad", "cache", "fsspec"),
-            # cache_check=600,
-            # block_size=1024,
-            # check_files=True,
-            # expiry_times=True,
-            # same_names=True
-        )
+        self.caching = caching
+        fs = HTTPFileSystem(get_client=get_client)
+        if self.caching:
+            self.fs = CachingFileSystem(
+                fs=fs,
+                # target_protocol='blockcache',
+                cache_storage=os.path.join(path, ".git", "datalad", "cache", "fsspec"),
+                # cache_check=600,
+                # block_size=1024,
+                # check_files=True,
+                # expiry_times=True,
+                # same_names=True
+            )
+        else:
+            self.fs = fs
 
     def close(self) -> None:
         if self.annex is not None:
@@ -194,13 +201,17 @@ class DatasetAdapter:
             return open(self.path / relpath, mode, **kwargs)  # type: ignore
 
     def clear(self) -> None:
-        self.fs.clear_cache()
+        if self.caching:
+            self.fs.clear_cache()
 
 
 class FsspecAdapter:
-    def __init__(self, root: str | Path, mode_transparent: bool = False) -> None:
+    def __init__(
+        self, root: str | Path, caching: bool, mode_transparent: bool = False
+    ) -> None:
         self.root = Path(root)
         self.mode_transparent = mode_transparent
+        self.caching = caching
         self.datasets: dict[Path, DatasetAdapter] = {}
 
     def __enter__(self) -> FsspecAdapter:
@@ -238,7 +249,9 @@ class FsspecAdapter:
             dsap = self.datasets[dspath]
         except KeyError:
             dsap = self.datasets[dspath] = DatasetAdapter(
-                dspath, mode_transparent=self.mode_transparent
+                dspath,
+                mode_transparent=self.mode_transparent,
+                caching=self.caching,
             )
         relpath = str(Path(filepath).relative_to(dspath))
         return dsap, relpath

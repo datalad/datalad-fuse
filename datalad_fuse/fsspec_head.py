@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from itertools import islice
 import os.path
 import sys
@@ -9,9 +11,8 @@ from datalad.distribution.dataset import (
     datasetmethod,
     require_dataset,
 )
-from datalad.interface.base import Interface, build_doc
+from datalad.interface.base import Interface, build_doc, eval_results
 from datalad.interface.results import get_status_dict
-from datalad.interface.utils import eval_results
 from datalad.support.constraints import EnsureInt, EnsureNone, EnsureStr
 from datalad.support.param import Parameter
 
@@ -52,6 +53,12 @@ class FsspecHead(Interface):
             action="store_true",
             doc="Support reading from .git directory",
         ),
+        "caching": Parameter(
+            args=("--caching",),
+            choices=["none", "ondisk"],
+            default="none",
+            doc="Whether to cache fsspec'ed files on disk on not at all",
+        ),
         "path": Parameter(
             args=("path",),
             doc="Path to an annexed file to show the leading contents of",
@@ -68,13 +75,16 @@ class FsspecHead(Interface):
         lines: Optional[int] = None,
         bytes: Optional[int] = None,
         mode_transparent: bool = False,
+        caching: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(dataset, purpose="fetch file data", check_installed=True)
         if lines is not None and bytes is not None:
             raise ValueError("'lines' and 'bytes' are mutually exclusive")
         elif lines is None and bytes is None:
             lines = DEFAULT_LINES
-        with FsspecAdapter(ds.path, mode_transparent=mode_transparent) as fsa:
+        with FsspecAdapter(
+            ds.path, mode_transparent=mode_transparent, caching=caching == "ondisk"
+        ) as fsa:
             if not os.path.isabs(path):
                 path = os.path.join(ds.path, path)
             with fsa.open(path) as fp:

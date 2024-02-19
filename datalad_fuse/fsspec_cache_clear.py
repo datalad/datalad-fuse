@@ -6,9 +6,8 @@ from datalad.distribution.dataset import (
     datasetmethod,
     require_dataset,
 )
-from datalad.interface.base import Interface, build_doc
+from datalad.interface.base import Interface, build_doc, eval_results
 from datalad.interface.results import get_status_dict
-from datalad.interface.utils import eval_results
 from datalad.support.constraints import EnsureNone
 from datalad.support.param import Parameter
 
@@ -45,13 +44,13 @@ class FsspecCacheClear(Interface):
         ds = require_dataset(
             dataset, purpose="clear fsspec cache", check_installed=True
         )
-        DatasetAdapter(ds.path).clear()
+        DatasetAdapter(ds.path, caching=True).clear()
         yield get_status_dict(action="fsspec-cache-clear", ds=ds, status="ok")
         if recursive:
             for subds in ds.subdatasets(
                 recursive=True, fulfilled=True, result_renderer="disabled"
             ):
-                DatasetAdapter(subds["path"]).clear()
+                DatasetAdapter(subds["path"], caching=True).clear()
                 yield get_status_dict(
                     action="fsspec-cache-clear",
                     refds=ds.path,
