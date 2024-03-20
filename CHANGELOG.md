@@ -1,3 +1,30 @@
+# 0.5.0 (Wed Mar 20 2024)
+
+#### 🚀 Enhancement
+
+- Add `--caching` option (off by default) [#104](https://github.com/datalad/datalad-fuse/pull/104) ([@jwodder](https://github.com/jwodder))
+
+#### 🏠 Internal
+
+- Add codespell: pre-commit config, config, and dedicated GH action; fix 2 typos [#107](https://github.com/datalad/datalad-fuse/pull/107) ([@yarikoptic](https://github.com/yarikoptic))
+- [gh-actions](deps): Bump codecov/codecov-action from 3 to 4 [#102](https://github.com/datalad/datalad-fuse/pull/102) ([@dependabot[bot]](https://github.com/dependabot[bot]) [@jwodder](https://github.com/jwodder))
+- [gh-actions](deps): Bump actions/setup-python from 4 to 5 [#101](https://github.com/datalad/datalad-fuse/pull/101) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- [gh-actions](deps): Bump actions/checkout from 3 to 4 [#98](https://github.com/datalad/datalad-fuse/pull/98) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- Get CI to pass again [#100](https://github.com/datalad/datalad-fuse/pull/100) ([@jwodder](https://github.com/jwodder))
+
+#### 🧪 Tests
+
+- Don't use asv 0.6.2 [#106](https://github.com/datalad/datalad-fuse/pull/106) ([@jwodder](https://github.com/jwodder))
+- Partial attempt at fixing Benchmark workflow [#105](https://github.com/datalad/datalad-fuse/pull/105) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 3
+
+- [@dependabot[bot]](https://github.com/dependabot[bot])
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.4.2 (Fri Feb 24 2023)
 
 #### 🐛 Bug Fix
