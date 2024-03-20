@@ -1,3 +1,15 @@
+# 0.5.1 (Wed Mar 20 2024)
+
+#### 🏠 Internal
+
+- Update versioneer to 0.29 [#110](https://github.com/datalad/datalad-fuse/pull/110) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 1
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
 # 0.5.0 (Wed Mar 20 2024)
 
 #### 🚀 Enhancement
