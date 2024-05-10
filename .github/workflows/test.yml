@@ -19,10 +19,6 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install eatmydata
         sudo eatmydata apt-get install git-annex-standalone
-    - name: Set up environment
-      run: |
-        git config --global user.email "test@github.land"
-        git config --global user.name "GitHub Almighty"
     - uses: actions/checkout@v4
     - name: Set up Python 3.8
       uses: actions/setup-python@v5

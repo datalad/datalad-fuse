@@ -20,11 +20,6 @@ jobs:
           sudo apt-get install eatmydata
           sudo eatmydata apt-get install -y fuse git-annex-standalone
 
-      - name: Set up environment
-        run: |
-          git config --global user.email "test@github.land"
-          git config --global user.name "GitHub Almighty"
-
       - uses: actions/checkout@v4
 
       - name: Set up Python 3.8
