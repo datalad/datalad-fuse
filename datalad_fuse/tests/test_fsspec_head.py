@@ -126,7 +126,7 @@ def test_subdataset_get_bytes_binary(superdataset):
     )
 
 
-def test_git_repo(tmp_path):
+def test_git_repo(tmp_path, tmp_home):  # noqa: U100
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     TEXT = (Path(__file__).with_name("data") / "text.txt").read_bytes()
     (tmp_path / "text.txt").write_bytes(TEXT)
