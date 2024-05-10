@@ -8,10 +8,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Set up environment
-      run: |
-        git config --global user.email "test@github.land"
-        git config --global user.name "GitHub Almighty"
     - uses: actions/checkout@v4
     - name: Set up Python 3.8
       uses: actions/setup-python@v5
