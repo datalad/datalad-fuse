@@ -1,3 +1,23 @@
+# 0.5.2 (Fri May 16 2025)
+
+#### 🏠 Internal
+
+- Add codespell problem matcher action to CI [#120](https://github.com/datalad/datalad-fuse/pull/120) ([@yarikoptic](https://github.com/yarikoptic))
+- Add fusepy as explicit dependency since we do import it directly as well [#117](https://github.com/datalad/datalad-fuse/pull/117) ([@yarikoptic](https://github.com/yarikoptic))
+- [DATALAD RUNCMD] Make python 3.8 to be minimal python and test with it instead of EOLed 3.7 [#108](https://github.com/datalad/datalad-fuse/pull/108) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🧪 Tests
+
+- [gh-actions](deps): Bump codecov/codecov-action from 4 to 5 [#119](https://github.com/datalad/datalad-fuse/pull/119) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- Remove specification of user.* git config for docbuild and test CIs [#114](https://github.com/datalad/datalad-fuse/pull/114) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 2
+
+- [@dependabot[bot]](https://github.com/dependabot[bot])
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.5.1 (Wed Mar 20 2024)
 
 #### 🏠 Internal
