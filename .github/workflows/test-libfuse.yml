@@ -20,7 +20,7 @@ jobs:
           sudo apt-get install eatmydata
           sudo eatmydata apt-get install -y fuse git-annex-standalone
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python 3.8
         uses: actions/setup-python@v5
