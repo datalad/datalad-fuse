@@ -21,12 +21,14 @@
     // Customizable commands for building, installing, and
     // uninstalling the project. See asv.conf.json documentation.
     //
-    // "install_command": ["in-dir={env_dir} python -mpip install {wheel_file}"],
-    // "uninstall_command": ["return-code=any python -mpip uninstall -y {project}"],
-    // "build_command": [
-    //     "python setup.py build",
-    //     "PIP_NO_BUILD_ISOLATION=false python -mpip wheel --no-deps --no-index -w {build_cache_dir} {build_dir}"
-    // ],
+    // Default build/install uses {wheel_file} which requires the build
+    // step to produce a wheel. Skip that and install directly to avoid
+    // PEP 517 build isolation issues (e.g. yanked setuptools versions
+    // in old commits' pyproject.toml).
+    "build_command": [],
+    "install_command": [
+        "in-dir={env_dir} python -mpip install --force-reinstall {build_dir}"
+    ],
 
     // List of branches to benchmark. If not provided, defaults to "master"
     // (for git) or "default" (for mercurial).
