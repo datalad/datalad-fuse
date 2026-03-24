@@ -55,7 +55,11 @@ jobs:
         run: asv run --show-stderr --python 3.9 HEAD^-1
 
       - name: Check out previous code
-        run: git checkout --force refs/bm/merge-target
+        run: |
+          # Preserve PR's asv.conf.json so benchmarks use the same config
+          cp asv.conf.json /tmp/asv.conf.json
+          git checkout --force refs/bm/merge-target
+          cp /tmp/asv.conf.json asv.conf.json
 
       - name: Run benchmarks on previous code
         run: asv run --show-stderr --python 3.9 HEAD^-1
