@@ -23,7 +23,7 @@ BIG_URLS = [
     # (dataset path, URL, SHA256 digest)
     (
         "APL.pdf",
-        "http://www.softwarepreservation.org/projects/apl/Books/APROGRAMMING%20LANGUAGE",
+        "https://web.archive.org/web/20210221095146if_/http://www.softwarepreservation.org/projects/apl/Books/APROGRAMMING%20LANGUAGE",
         "c65ccc2a97cdb6042641847112dc6e4d4d6e75fdedcd476fdd61f855711bbaf4",
     ),
     (
