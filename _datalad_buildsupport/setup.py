@@ -13,8 +13,9 @@ from os.path import (
     dirname,
     join as opj,
 )
-from setuptools import Command, DistutilsOptionError
+from setuptools import Command
 from setuptools.config import read_configuration
+from setuptools.errors import OptionError
 
 import versioneer
 
@@ -51,11 +52,11 @@ class BuildManPage(Command):
 
     def finalize_options(self):
         if self.manpath is None:
-            raise DistutilsOptionError('\'manpath\' option is required')
+            raise OptionError('\'manpath\' option is required')
         if self.rstpath is None:
-            raise DistutilsOptionError('\'rstpath\' option is required')
+            raise OptionError('\'rstpath\' option is required')
         if self.parser is None:
-            raise DistutilsOptionError('\'parser\' option is required')
+            raise OptionError('\'parser\' option is required')
         mod_name, func_name = self.parser.split(':')
         fromlist = mod_name.split('.')
         try:
@@ -74,7 +75,7 @@ class BuildManPage(Command):
             mod_name, suite_name = self.cmdsuite.split(':')
             mod = __import__(mod_name, fromlist=mod_name.split('.'))
             suite = getattr(mod, suite_name)
-            self.cmdlist = [c[2] if len(c) > 2 else c[1].replace('_', '-')
+            self.cmdlist = [c[2] if len(c) > 2 else c[1].replace('_', '-').lower()
                             for c in suite[1]]
 
         self.announce('Writing man page(s) to %s' % self.manpath)
@@ -156,40 +157,6 @@ class BuildManPage(Command):
                     f.write(formatted)
 
 
-class BuildRSTExamplesFromScripts(Command):
-    description = 'Generate RST variants of example shell scripts.'
-
-    user_options = [
-        ('expath=', None, 'path to look for example scripts'),
-        ('rstpath=', None, 'output path for RST files'),
-    ]
-
-    def initialize_options(self):
-        self.expath = opj('docs', 'examples')
-        self.rstpath = opj('docs', 'source', 'generated', 'examples')
-
-    def finalize_options(self):
-        if self.expath is None:
-            raise DistutilsOptionError('\'expath\' option is required')
-        if self.rstpath is None:
-            raise DistutilsOptionError('\'rstpath\' option is required')
-        self.announce('Converting example scripts')
-
-    def run(self):
-        opath = self.rstpath
-        if not os.path.exists(opath):
-            os.makedirs(opath)
-
-        from glob import glob
-        for example in glob(opj(self.expath, '*.sh')):
-            exname = os.path.basename(example)[:-3]
-            with open(opj(opath, '{0}.rst'.format(exname)), 'w') as out:
-                fmt.cmdline_example_to_rst(
-                    open(example),
-                    out=out,
-                    ref='_example_{0}'.format(exname))
-
-
 class BuildConfigInfo(Command):
     description = 'Generate RST documentation for all config items.'
 
@@ -202,7 +169,7 @@ class BuildConfigInfo(Command):
 
     def finalize_options(self):
         if self.rstpath is None:
-            raise DistutilsOptionError('\'rstpath\' option is required')
+            raise OptionError('\'rstpath\' option is required')
         self.announce('Generating configuration documentation')
 
     def run(self):
