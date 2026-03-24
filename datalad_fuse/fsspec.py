@@ -124,6 +124,7 @@ class DatasetAdapter:
         )(key)
 
         uuid2remote_url = {}
+        aneksajo_uuids: set[str] = set()
         for r in self.annex.get_remotes():
             ru = self.annex.config.get(f"remote.{r}.annex-uuid")
             if ru is None:
@@ -133,6 +134,9 @@ class DatasetAdapter:
                 continue
             remote_url = self.annex.config.rewrite_url(remote_url)
             uuid2remote_url[ru] = remote_url
+            annexurl = self.annex.config.get(f"remote.{r}.annexurl")
+            if annexurl and annexurl.startswith("annex+"):
+                aneksajo_uuids.add(ru)
 
         for ru in remote_uuids:
             try:
@@ -140,7 +144,14 @@ class DatasetAdapter:
             except KeyError:
                 continue
             if is_http_url(base_url):
-                if base_url.lower().rstrip("/").endswith("/.git"):
+                base_stripped = base_url.rstrip("/")
+                # Forgejo/Gitea with aneksajo: use annex/objects endpoint
+                # which supports HEAD and Range requests.
+                # See https://codeberg.org/forgejo-aneksajo/forgejo-aneksajo/issues/111
+                if ru in aneksajo_uuids and base_stripped.endswith(".git"):
+                    forge_base = base_stripped[:-4].rstrip("/")
+                    yield forge_base + "/" + path_lower
+                if base_stripped.lower().endswith("/.git"):
                     paths = [path_mixed, path_lower]
                 else:
                     paths = [
@@ -150,7 +161,7 @@ class DatasetAdapter:
                         f".git/{path_mixed}",
                     ]
                 for p in paths:
-                    yield base_url.rstrip("/") + "/" + p
+                    yield base_stripped + "/" + p
 
     def open(
         self,
