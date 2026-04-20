@@ -14,7 +14,7 @@ from datalad.api import Dataset, clone
 import pytest
 import requests
 
-pytest_plugins = ["datalad_fuse.tests.conftest_forgejo"]
+from .conftest_forgejo import forgejo_instance, forgejo_repo  # noqa: F401
 
 DATA_DIR = Path(__file__).with_name("data")
 

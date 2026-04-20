@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import time
+from time import sleep
 from typing import Iterator
 import uuid as uuid_mod
 
@@ -30,6 +31,7 @@ FORGEJO_CONTAINER_NAME = "datalad-fuse-test-forgejo"
 FORGEJO_ADMIN_USER = "testadmin"
 FORGEJO_ADMIN_PASSWORD = "testpass123!"
 FORGEJO_ADMIN_EMAIL = "admin@test.nil"
+FORGEJO_INTERNAL_PORT = 3000
 
 
 def _skip_or_fail(msg: str, *, strict: bool) -> None:
@@ -78,8 +80,8 @@ def _container_is_running(runtime: str, name: str) -> bool:
 
 
 def _get_host_port(runtime: str, container_id: str) -> int:
-    """Extract the host port mapped to container port 3000."""
-    r = _run(runtime, "port", container_id, "3000")
+    """Extract the host port mapped to the container's internal port."""
+    r = _run(runtime, "port", container_id, str(FORGEJO_INTERNAL_PORT))
     # Output like "0.0.0.0:12345" or "0.0.0.0:12345\n:::12345"
     for line in r.stdout.strip().splitlines():
         if ":" in line:
@@ -191,7 +193,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
             "--name",
             FORGEJO_CONTAINER_NAME,
             "-p",
-            "3000",
+            str(FORGEJO_INTERNAL_PORT),
             "-e",
             "FORGEJO__security__INSTALL_LOCK=true",
         ]
@@ -230,7 +232,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
 @dataclass
 class ForgejoRepo:
     local_path: Path
-    remote_url: str  # URL with correct host port (not internal 3000)
+    remote_url: str  # URL with correct host port (not FORGEJO_INTERNAL_PORT)
     relpath: str
     annex_key: str
     content: bytes
@@ -241,8 +243,8 @@ class ForgejoRepo:
 def _fix_clone_url(api_clone_url: str, instance_url: str) -> str:
     """Replace host:port in the API-returned clone URL with the real one.
 
-    Forgejo inside the container returns ``http://localhost:3000/…`` but
-    the container's port 3000 is mapped to a dynamic host port.
+    Forgejo inside the container returns ``http://localhost:FORGEJO_INTERNAL_PORT/…``
+    but the container's FORGEJO_INTERNAL_PORT is mapped to a dynamic host port.
     """
     return re.sub(
         r"https?://[^/]+",
@@ -277,9 +279,13 @@ def forgejo_repo(
         resp.json()["clone_url"],
         forgejo_instance.url,
     )
+    # Put the token in the username field with an empty password.
+    # Forgejo accepts API tokens as usernames, and this avoids a
+    # git-annex bug where it sends "..." instead of the actual password
+    # from the URL.  See https://git-annex.branchable.com/bugs/...
     auth_url = remote_url.replace(
         "://",
-        f"://{forgejo_instance.admin_user}:{forgejo_instance.api_token}@",
+        f"://{forgejo_instance.api_token}:@",
     )
 
     local_path = tmp_path_factory.mktemp("forgejo_repo") / repo_name
@@ -302,36 +308,66 @@ def forgejo_repo(
             scope="local",
         )
 
-        # Add forgejo remote: clean URL for fetch (so git-annex can
-        # read the remote config without auth issues), auth URL only
-        # for push.
+        # Add forgejo remote: clean URL for fetch, auth URL for push.
         ds.repo.add_remote("forgejo", remote_url)
-        ds.repo.call_git(
-            [
-                "config",
-                "remote.forgejo.pushurl",
-                auth_url,
-            ]
+        ds.repo.call_git(["config", "remote.forgejo.pushurl", auth_url])
+
+        # Suppress interactive credential prompts — git-annex will
+        # auto-discover the p2p endpoint from the remote and may try
+        # to authenticate.
+        old_terminal_prompt = os.environ.get("GIT_TERMINAL_PROMPT")
+        try:
+            os.environ["GIT_TERMINAL_PROMPT"] = "0"
+            # ds.push(to="forgejo", data="nothing")
+            for iter in range(4):
+                ds.repo.call_git(["push", "forgejo", ds.repo.get_active_branch()])
+                ds.repo.call_git(["annex", "init"])
+                ds.config.reload()
+                for cfg in "annex-ignore", "annex-ignore-auto":
+                    cfg_ = f"remote.forgejo.{cfg}"
+                    if ds.config.get(cfg_):
+                        ds.config.unset(cfg_, scope="local")
+                if ds.config.get("remote.forgejo.annex-uuid"):
+                    print(f"We are good on iter {iter}")
+                    break
+                print(f"iter {iter}")
+                sleep(0.2)
+            print(ds.path)
+            if os.environ.get("DATALAD_DEBUG"):
+                import pdb
+
+                pdb.set_trace()
+
+        finally:
+            if old_terminal_prompt is None:
+                os.environ.pop("GIT_TERMINAL_PROMPT", None)
+            else:
+                os.environ["GIT_TERMINAL_PROMPT"] = old_terminal_prompt
+
+        # Verify annex content was actually transferred
+        assert ds.config.get("remote.forgejo.annex-uuid"), (
+            "remote.forgejo.annex-uuid not set after push — "
+            "git-annex could not discover the remote"
         )
+        # git-annex auto-discovers annexurl from the remote but uses
+        # the internal container port (localhost:3000) instead of the
+        # mapped host port.  Fix it up.
+        # https://git-annex.branchable.com/bugs/annex_overwrites_existing_p2p_annexurl/
+        correct_annexurl = f"annex+{forgejo_instance.url}/git-annex-p2phttp"
         ds.repo.call_git(
             [
                 "config",
                 "remote.forgejo.annexurl",
-                f"annex+{forgejo_instance.url}/git-annex-p2phttp",
+                correct_annexurl,
             ]
         )
-        ds.push(to="forgejo", data="anything")
 
         assert not ds.config.get("remote.forgejo.annex-ignore"), (
             "remote.forgejo.annex-ignore is set — " "git-annex is ignoring this remote"
         )
 
-        # Verify annex content was actually transferred
-        annex_uuid = ds.config.get("remote.forgejo.annex-uuid")
-        assert annex_uuid, (
-            "remote.forgejo.annex-uuid not set after push — "
-            "git-annex could not discover the remote"
-        )
+        # Do push our data file
+        ds.push(to="forgejo", data="anything")
 
         yield ForgejoRepo(
             local_path=local_path,
