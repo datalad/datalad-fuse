@@ -16,7 +16,7 @@ from datalad.interface.results import get_status_dict
 from datalad.support.constraints import EnsureInt, EnsureNone, EnsureStr
 from datalad.support.param import Parameter
 
-from .fsspec import FsspecAdapter
+from .adapter import RemoteFilesystemAdapter
 
 DEFAULT_LINES = 10
 
@@ -64,6 +64,15 @@ class FsspecHead(Interface):
             doc="Path to an annexed file to show the leading contents of",
             constraints=EnsureStr(),
         ),
+        "backends": Parameter(
+            args=("--backends",),
+            doc=(
+                "Comma-separated list of backends to try for remote file"
+                " access, in priority order.  Available: remfile, fsspec."
+                "  Default: remfile,fsspec"
+            ),
+            constraints=EnsureStr() | EnsureNone(),
+        ),
     }
 
     @staticmethod
@@ -76,14 +85,18 @@ class FsspecHead(Interface):
         bytes: Optional[int] = None,
         mode_transparent: bool = False,
         caching: str | None = None,
+        backends: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(dataset, purpose="fetch file data", check_installed=True)
         if lines is not None and bytes is not None:
             raise ValueError("'lines' and 'bytes' are mutually exclusive")
         elif lines is None and bytes is None:
             lines = DEFAULT_LINES
-        with FsspecAdapter(
-            ds.path, mode_transparent=mode_transparent, caching=caching == "ondisk"
+        with RemoteFilesystemAdapter(
+            ds.path,
+            mode_transparent=mode_transparent,
+            caching=caching == "ondisk",
+            backends=backends,
         ) as fsa:
             if not os.path.isabs(path):
                 path = os.path.join(ds.path, path)
