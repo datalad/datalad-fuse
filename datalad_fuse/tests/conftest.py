@@ -51,6 +51,12 @@ def pytest_addoption(parser) -> None:
         default=False,
         help="Enable fuse tests",
     )
+    parser.addoption(
+        "--network",
+        action="store_true",
+        default=False,
+        help="Enable tests that hit the public network",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -59,6 +65,11 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "libfuse" in item.keywords:
                 item.add_marker(skip_no_libfuse)
+    if not config.getoption("--network"):
+        skip_no_network = pytest.mark.skip(reason="Only run when --network is given")
+        for item in items:
+            if "network" in item.keywords:
+                item.add_marker(skip_no_network)
 
 
 @pytest.fixture()
