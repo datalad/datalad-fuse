@@ -26,7 +26,11 @@ import requests
 
 lgr = logging.getLogger("datalad.fuse.tests.forgejo")
 
-FORGEJO_IMAGE = "codeberg.org/forgejo-aneksajo/forgejo-aneksajo:forgejo-rootless"
+# NB: the bare "forgejo-rootless" tag is the *upstream* Forgejo image,
+# not the aneksajo build — pin explicitly to a git-annex tag.
+FORGEJO_IMAGE = (
+    "codeberg.org/forgejo-aneksajo/forgejo-aneksajo:v14.0.3-git-annex2-rootless"
+)
 FORGEJO_CONTAINER_NAME = "datalad-fuse-test-forgejo"
 FORGEJO_ADMIN_USER = "testadmin"
 FORGEJO_ADMIN_PASSWORD = "testpass123!"
@@ -179,7 +183,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
         # Remove a stale (stopped) container with the same name, but
         # never kill a running one — it may belong to another test session.
         if not _container_is_running(runtime, FORGEJO_CONTAINER_NAME):
-            _run(runtime, "rm", FORGEJO_CONTAINER_NAME, check=False)
+            _run(runtime, "rm", "-f", FORGEJO_CONTAINER_NAME, check=False)
 
         if do_pull:
             lgr.info("Pulling Forgejo-aneksajo image …")
@@ -208,7 +212,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
 
     try:
         port = _get_host_port(runtime, container_id)
-        url = f"http://127.0.0.1:{port}"
+        url = f"http://127.0.0.1:{port}"  # noqa: E231
         _wait_for_forgejo(url)
 
         if not reused:
@@ -257,7 +261,7 @@ def _fix_clone_url(api_clone_url: str, instance_url: str) -> str:
 @pytest.fixture
 def forgejo_repo(
     forgejo_instance: ForgejoInstance,
-    tmp_home: Path,  # noqa: U100
+    tmp_home: Path,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[ForgejoRepo]:
     """Create a local dataset, push it to the Forgejo instance.
@@ -285,7 +289,7 @@ def forgejo_repo(
     # from the URL.  See https://git-annex.branchable.com/bugs/...
     auth_url = remote_url.replace(
         "://",
-        f"://{forgejo_instance.api_token}:@",
+        f"://{forgejo_instance.api_token}:@",  # noqa: E231
     )
 
     local_path = tmp_path_factory.mktemp("forgejo_repo") / repo_name
@@ -312,15 +316,26 @@ def forgejo_repo(
         ds.repo.add_remote("forgejo", remote_url)
         ds.repo.call_git(["config", "remote.forgejo.pushurl", auth_url])
 
-        # Suppress interactive credential prompts — git-annex will
-        # auto-discover the p2p endpoint from the remote and may try
-        # to authenticate.
+        # git-annex probes the remote's .git/config using
+        # `git credential fill` — which fails (exit 128) in a clean
+        # HOME with no credential helpers and GIT_TERMINAL_PROMPT=0,
+        # even though the resource is publicly accessible.  Configure
+        # the git-credential-store so it can supply the token.
+        (tmp_home / ".git-credentials").write_text(f"{auth_url}\n")
+        subprocess.run(
+            ["git", "config", "--global", "credential.helper", "store"],
+            check=True,
+        )
+
+        # Suppress interactive credential prompts.
         old_terminal_prompt = os.environ.get("GIT_TERMINAL_PROMPT")
         try:
             os.environ["GIT_TERMINAL_PROMPT"] = "0"
-            # ds.push(to="forgejo", data="nothing")
             for iter in range(4):
-                ds.repo.call_git(["push", "forgejo", ds.repo.get_active_branch()])
+                ds.repo.call_git(
+                    ["push", "forgejo", ds.repo.get_active_branch(), "git-annex"]
+                )
+                ds.repo.call_git(["fetch", "forgejo"])
                 ds.repo.call_git(["annex", "init"])
                 ds.config.reload()
                 for cfg in "annex-ignore", "annex-ignore-auto":
@@ -328,11 +343,10 @@ def forgejo_repo(
                     if ds.config.get(cfg_):
                         ds.config.unset(cfg_, scope="local")
                 if ds.config.get("remote.forgejo.annex-uuid"):
-                    print(f"We are good on iter {iter}")
+                    lgr.info("annex-uuid discovered on iter %d", iter)
                     break
-                print(f"iter {iter}")
-                sleep(0.2)
-            print(ds.path)
+                lgr.info("iter %d: annex-uuid not yet set", iter)
+                sleep(0.5)
             if os.environ.get("DATALAD_DEBUG"):
                 import pdb
 
