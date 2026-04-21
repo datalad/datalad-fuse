@@ -21,8 +21,8 @@ from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 import methodtools
 
+from .adapter import RemoteFilesystemAdapter
 from .consts import CACHE_SIZE
-from .fsspec import FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
@@ -70,13 +70,20 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     _counter_offset = 1000
 
     def __init__(
-        self, root: str, caching: bool, mode_transparent: bool = False
+        self,
+        root: str,
+        caching: bool,
+        mode_transparent: bool = False,
+        backends: Optional[str] = None,
     ) -> None:
         self.root = op.realpath(root)
         self.mode_transparent = mode_transparent
         self.rwlock = Lock()
-        self._adapter = FsspecAdapter(
-            root, mode_transparent=mode_transparent, caching=caching
+        self._adapter = RemoteFilesystemAdapter(
+            root,
+            mode_transparent=mode_transparent,
+            caching=caching,
+            backends=backends,
         )
         self._fhdict: dict[int, Optional[IO[bytes]]] = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
