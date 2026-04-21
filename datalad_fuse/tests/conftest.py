@@ -59,6 +59,16 @@ def pytest_addoption(parser) -> None:
     )
 
 
+def pytest_configure(config) -> None:
+    """Block outbound network access when --network is not given."""
+    if not config.getoption("--network", default=False):
+        bogus = "http://localhost:19999/"
+        for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+            os.environ.setdefault(var, bogus)
+        for var in ("no_proxy", "NO_PROXY"):
+            os.environ.setdefault(var, "localhost,127.0.0.1")
+
+
 def pytest_collection_modifyitems(config, items):
     if not config.getoption("--libfuse"):
         skip_no_libfuse = pytest.mark.skip(reason="Only run when --libfuse is given")
@@ -108,7 +118,7 @@ def local_server(directory):
     p.start()
     try:
         port = queue.get(timeout=300)
-        url = f"http://{hostname}:{port}"
+        url = f"http://{hostname}:{port}"  # noqa: E231
         lgr.debug("HTTP: serving %s at %s", directory, url)
         with pytest.MonkeyPatch().context() as m:
             m.delenv("http_proxy", raising=False)
