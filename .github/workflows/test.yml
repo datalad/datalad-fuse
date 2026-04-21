@@ -12,7 +12,10 @@ jobs:
       fail-fast: false
       # Base matrix runs `tox` via tox-gh-actions (picks py3XX).  The 3.14
       # row additionally installs libfuse and flips tox to the `py314-full`
-      # env so FUSE + network tests also run on one Python sweep.
+      # env so FUSE + network tests also run on one Python sweep.  The
+      # `nonetwork` row re-runs 3.14 with libfuse but bogus HTTP proxies
+      # (no --network) to prove the @pytest.mark.network gating actually
+      # isolates outbound-network tests.
       matrix:
         include:
           - python-version: '3.10'
@@ -21,6 +24,8 @@ jobs:
           - python-version: '3.13'
           - python-version: '3.14'
             full: true
+          - python-version: '3.14'
+            nonetwork: true
     runs-on: ubuntu-22.04
     steps:
     - name: Set up system
@@ -32,8 +37,8 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install eatmydata
         sudo eatmydata apt-get install git-annex-standalone
-    - name: Install libfuse (full job only)
-      if: matrix.full
+    - name: Install libfuse (full and nonetwork jobs)
+      if: matrix.full || matrix.nonetwork
       run: sudo eatmydata apt-get install -y fuse
     - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
@@ -51,6 +56,8 @@ jobs:
         datalad wtf
         if [ "${{ matrix.full }}" = "true" ]; then
           tox -e py314-full
+        elif [ "${{ matrix.nonetwork }}" = "true" ]; then
+          tox -e py314-nonetwork
         else
           tox
         fi
@@ -60,4 +67,4 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
-        name: py${{ matrix.python-version }}${{ matrix.full && '-full' || '' }}
+        name: py${{ matrix.python-version }}${{ matrix.full && '-full' || '' }}${{ matrix.nonetwork && '-nonetwork' || '' }}
