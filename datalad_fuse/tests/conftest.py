@@ -14,6 +14,8 @@ from datalad.api import Dataset, clone
 import pytest
 import requests
 
+from .conftest_forgejo import forgejo_instance, forgejo_repo  # noqa: F401
+
 DATA_DIR = Path(__file__).with_name("data")
 
 lgr = logging.getLogger("datalad.fuse.tests")
@@ -50,6 +52,13 @@ def pytest_addoption(parser) -> None:
         action="store_true",
         default=False,
         help="Enable fuse tests",
+    )
+    parser.addoption(
+        "--forgejo",
+        action="store_true",
+        default=False,
+        help="Enable Forgejo-aneksajo integration tests "
+        "(errors are fatal instead of skipped)",
     )
     parser.addoption(
         "--network",
