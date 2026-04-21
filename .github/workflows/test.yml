@@ -2,12 +2,32 @@ name: Test
 
 on:
   push:
+    branches: [master]
   pull_request:
   schedule:
     - cron: '0 7 * * *'
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      # Base matrix runs `tox` via tox-gh-actions (picks py3XX).
+      # pytest_configure() blocks outbound network by default (bogus
+      # proxies), so every base row already verifies network isolation.
+      #
+      # Tox factors (combine with any pyXY):
+      #   full    — --libfuse --network (FUSE + real network tests)
+      #   libfuse — --libfuse only (FUSE tests, network still blocked)
+      matrix:
+        include:
+          - python-version: '3.10'
+          - python-version: '3.11'
+          - python-version: '3.12'
+          - python-version: '3.13'
+          - python-version: '3.14'
+            full: true
+          - python-version: '3.14'
+            libfuse: true
     runs-on: ubuntu-22.04
     steps:
     - name: Set up system
@@ -19,24 +39,34 @@ jobs:
         sudo apt-get update -qq
         sudo apt-get install eatmydata
         sudo eatmydata apt-get install git-annex-standalone
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v5
+    - name: Install libfuse (full and libfuse jobs)
+      if: matrix.full || matrix.libfuse
+      run: sudo eatmydata apt-get install -y fuse
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
       with:
-        python-version: 3.9
+        python-version: ${{ matrix.python-version }}
+        allow-prereleases: true
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install coverage datalad tox
+        python -m pip install coverage datalad tox tox-gh-actions
     - name: Run tests
       run: |
         # give detailed info on actual test setup
         datalad wtf
-        tox -e py3
+        if [ "${{ matrix.full }}" = "true" ]; then
+          tox -e py314-full
+        elif [ "${{ matrix.libfuse }}" = "true" ]; then
+          tox -e py314-libfuse
+        else
+          tox
+        fi
         coverage xml
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
-        name: no-fuse
+        name: py${{ matrix.python-version }}${{ matrix.full && '-full' || '' }}${{ matrix.libfuse && '-libfuse' || '' }}
