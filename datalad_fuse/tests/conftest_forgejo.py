@@ -162,6 +162,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
     * ``DATALAD_TESTS_CONTAINER_PULL``  — set to ``0`` to skip image pull
     """
     strict = request.config.getoption("--forgejo", default=False)
+    network = request.config.getoption("--network", default=False)
     runtime = _find_container_runtime(strict=strict)
     persist = os.environ.get("DATALAD_TESTS_CONTAINER_PERSIST")
     do_pull = os.environ.get("DATALAD_TESTS_CONTAINER_PULL", "1") != "0"
@@ -185,11 +186,20 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
         if not _container_is_running(runtime, FORGEJO_CONTAINER_NAME):
             _run(runtime, "rm", "-f", FORGEJO_CONTAINER_NAME, check=False)
 
-        if do_pull:
+        if do_pull and network:
             lgr.info("Pulling Forgejo-aneksajo image …")
             r = _run(runtime, "pull", FORGEJO_IMAGE, check=False)
             if r.returncode:
                 pytest.fail(f"Failed to pull {FORGEJO_IMAGE}: {r.stderr}")
+        elif do_pull and not network:
+            # No --network: check if the image is already available locally.
+            r = _run(runtime, "image", "exists", FORGEJO_IMAGE, check=False)
+            if r.returncode:
+                _skip_or_fail(
+                    f"{FORGEJO_IMAGE} not available locally and "
+                    f"--network not given (cannot pull)",
+                    strict=strict,
+                )
 
         run_args = [
             "run",
@@ -261,7 +271,7 @@ def _fix_clone_url(api_clone_url: str, instance_url: str) -> str:
 @pytest.fixture
 def forgejo_repo(
     forgejo_instance: ForgejoInstance,
-    tmp_home: Path,
+    tmp_home: Path,  # noqa: U100
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[ForgejoRepo]:
     """Create a local dataset, push it to the Forgejo instance.
@@ -312,51 +322,29 @@ def forgejo_repo(
             scope="local",
         )
 
-        # Add forgejo remote: clean URL for fetch, auth URL for push.
-        ds.repo.add_remote("forgejo", remote_url)
-        ds.repo.call_git(["config", "remote.forgejo.pushurl", auth_url])
+        # Use the auth URL as the remote URL so git-annex can
+        # authenticate when probing the remote's .git/config during
+        # `git annex init`.  Aneksajo lazily initialises the repo-side
+        # annex (setting annex.uuid) on the first authenticated request
+        # to /config — see forgejo-aneksajo#113.
+        ds.repo.add_remote("forgejo", auth_url)
 
-        # git-annex probes the remote's .git/config using
-        # `git credential fill` — which fails (exit 128) in a clean
-        # HOME with no credential helpers and GIT_TERMINAL_PROMPT=0,
-        # even though the resource is publicly accessible.  Configure
-        # the git-credential-store so it can supply the token.
-        (tmp_home / ".git-credentials").write_text(f"{auth_url}\n")
-        subprocess.run(
-            ["git", "config", "--global", "credential.helper", "store"],
-            check=True,
-        )
-
-        # Suppress interactive credential prompts.
-        old_terminal_prompt = os.environ.get("GIT_TERMINAL_PROMPT")
-        try:
-            os.environ["GIT_TERMINAL_PROMPT"] = "0"
-            for iter in range(4):
-                ds.repo.call_git(
-                    ["push", "forgejo", ds.repo.get_active_branch(), "git-annex"]
-                )
-                ds.repo.call_git(["fetch", "forgejo"])
-                ds.repo.call_git(["annex", "init"])
-                ds.config.reload()
-                for cfg in "annex-ignore", "annex-ignore-auto":
-                    cfg_ = f"remote.forgejo.{cfg}"
-                    if ds.config.get(cfg_):
-                        ds.config.unset(cfg_, scope="local")
-                if ds.config.get("remote.forgejo.annex-uuid"):
-                    lgr.info("annex-uuid discovered on iter %d", iter)
-                    break
-                lgr.info("iter %d: annex-uuid not yet set", iter)
-                sleep(0.5)
-            if os.environ.get("DATALAD_DEBUG"):
-                import pdb
-
-                pdb.set_trace()
-
-        finally:
-            if old_terminal_prompt is None:
-                os.environ.pop("GIT_TERMINAL_PROMPT", None)
-            else:
-                os.environ["GIT_TERMINAL_PROMPT"] = old_terminal_prompt
+        for iter in range(4):
+            ds.repo.call_git(
+                ["push", "forgejo", ds.repo.get_active_branch(), "git-annex"]
+            )
+            ds.repo.call_git(["fetch", "forgejo"])
+            ds.repo.call_git(["annex", "init"])
+            ds.config.reload()
+            for cfg in "annex-ignore", "annex-ignore-auto":
+                cfg_ = f"remote.forgejo.{cfg}"
+                if ds.config.get(cfg_):
+                    ds.config.unset(cfg_, scope="local")
+            if ds.config.get("remote.forgejo.annex-uuid"):
+                lgr.info("annex-uuid discovered on iter %d", iter)
+                break
+            lgr.info("iter %d: annex-uuid not yet set", iter)
+            sleep(0.5)
 
         # Verify annex content was actually transferred
         assert ds.config.get("remote.forgejo.annex-uuid"), (
