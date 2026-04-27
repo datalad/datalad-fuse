@@ -320,7 +320,7 @@ def forgejo_repo(
         (local_path / test_file).write_bytes(test_content)
         ds.save(message="Add test file")
 
-        annex_key = ds.repo.get_file_key(test_file)
+        annex_key = ds.repo.get_file_annexinfo(test_file)["key"]
 
         # Allow git-annex to connect to localhost (needed to fetch the
         # remote's .git/config and discover its annex UUID).
