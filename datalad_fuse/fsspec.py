@@ -320,8 +320,8 @@ def _is_aneksajo(base_url: str) -> bool:
     parsed = urlparse(base_url)
     # Cache key without userinfo so credentials don't fragment the cache
     host = parsed.hostname or ""
-    port_suffix = f":{parsed.port}" if parsed.port else ""
-    cache_key = f"{parsed.scheme}://{host}{port_suffix}"
+    port_suffix = f":{parsed.port}" if parsed.port else ""  # noqa: E231
+    cache_key = f"{parsed.scheme}://{host}{port_suffix}"  # noqa: E231
 
     if cache_key in _aneksajo_cache:
         return _aneksajo_cache[cache_key]
@@ -334,6 +334,7 @@ def _is_aneksajo(base_url: str) -> bool:
             data = json.loads(resp.read().decode())
             result = "git-annex" in data.get("version", "")
     except Exception:
+        lgr.debug("_is_aneksajo(%s) probe failed", cache_key, exc_info=True)
         result = False
 
     _aneksajo_cache[cache_key] = result
