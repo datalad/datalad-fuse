@@ -161,8 +161,11 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
     * ``DATALAD_TESTS_CONTAINER_PERSIST`` — keep container across runs
     * ``DATALAD_TESTS_CONTAINER_PULL``  — set to ``0`` to skip image pull
     """
-    strict = request.config.getoption("--forgejo", default=False)
-    network = request.config.getoption("--network", default=False)
+    no_forgejo = request.config.getoption("--no-forgejo", default=False)
+    no_network = request.config.getoption("--no-network", default=False)
+    # --no-forgejo: skip instead of fail; default is strict (fail on errors)
+    strict = not no_forgejo
+    network = not no_network
     runtime = _find_container_runtime(strict=strict)
     persist = os.environ.get("DATALAD_TESTS_CONTAINER_PERSIST")
     do_pull = os.environ.get("DATALAD_TESTS_CONTAINER_PULL", "1") != "0"

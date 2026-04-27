@@ -11,13 +11,14 @@ jobs:
   test:
     strategy:
       fail-fast: false
-      # Base matrix runs `tox` via tox-gh-actions (picks py3XX).
-      # pytest_configure() blocks outbound network by default (bogus
-      # proxies), so every base row already verifies network isolation.
+      # Base matrix runs `tox` via tox-gh-actions (picks py3XX-nonetwork).
+      # The nonetwork factor passes --no-network --no-forgejo and sets
+      # bogus HTTP proxies to catch any test that leaks network access.
       #
       # Tox factors (combine with any pyXY):
-      #   full    — --libfuse --network (FUSE + real network tests)
-      #   libfuse — --libfuse only (FUSE tests, network still blocked)
+      #   nonetwork — --no-network --no-forgejo (the CI default)
+      #   full      — --libfuse (FUSE tests; network+forgejo enabled)
+      #   libfuse   — --libfuse only
       matrix:
         include:
           - python-version: '3.10'
