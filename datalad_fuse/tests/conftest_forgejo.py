@@ -169,25 +169,30 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
     runtime = _find_container_runtime(strict=strict)
     persist = os.environ.get("DATALAD_TESTS_CONTAINER_PERSIST")
     do_pull = os.environ.get("DATALAD_TESTS_CONTAINER_PULL", "1") != "0"
+    # Use a PID-suffixed name to avoid collisions between concurrent runs.
+    # Persistent containers keep the fixed name so they can be reused.
+    container_name = (
+        FORGEJO_CONTAINER_NAME if persist else f"{FORGEJO_CONTAINER_NAME}-{os.getpid()}"
+    )
 
     reused = False
     container_id = ""
 
-    if persist and _container_is_running(runtime, FORGEJO_CONTAINER_NAME):
-        lgr.info("Reusing persisted Forgejo container %s", FORGEJO_CONTAINER_NAME)
+    if persist and _container_is_running(runtime, container_name):
+        lgr.info("Reusing persisted Forgejo container %s", container_name)
         container_id = _run(
             runtime,
             "inspect",
             "--format",
             "{{.Id}}",
-            FORGEJO_CONTAINER_NAME,
+            container_name,
         ).stdout.strip()
         reused = True
     else:
         # Remove a stale (stopped) container with the same name, but
         # never kill a running one — it may belong to another test session.
-        if not _container_is_running(runtime, FORGEJO_CONTAINER_NAME):
-            _run(runtime, "rm", "-f", FORGEJO_CONTAINER_NAME, check=False)
+        if not _container_is_running(runtime, container_name):
+            _run(runtime, "rm", "-f", container_name, check=False)
 
         if do_pull and network:
             lgr.info("Pulling Forgejo-aneksajo image …")
@@ -208,7 +213,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
             "run",
             "-d",
             "--name",
-            FORGEJO_CONTAINER_NAME,
+            container_name,
             "-p",
             str(FORGEJO_INTERNAL_PORT),
             "-e",
@@ -243,7 +248,7 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
         if not persist:
             lgr.info("Stopping Forgejo container %s", container_id)
             _run(runtime, "stop", container_id, check=False)
-            _run(runtime, "rm", "-f", FORGEJO_CONTAINER_NAME, check=False)
+            _run(runtime, "rm", "-f", container_name, check=False)
 
 
 @dataclass
