@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import time
 from time import sleep
-from typing import Iterator
+from typing import Iterator, Optional
 import uuid as uuid_mod
 
 from datalad.api import Dataset
@@ -138,25 +138,47 @@ def _create_api_token(url: str) -> str:
     return resp.json()["sha1"]
 
 
+def _resolve_user_from_token(url: str, token: str) -> str:
+    """Look up the username that owns the given API token."""
+    resp = requests.get(
+        f"{url}/api/v1/user",
+        headers={"Authorization": f"token {token}"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return str(resp.json()["login"])
+
+
 @dataclass
 class ForgejoInstance:
     url: str
     admin_user: str
-    admin_password: str
     api_token: str
-    runtime: str
-    container_id: str
+    # Unset for externally-managed instances (DATALAD_TESTS_FORGEJO_URL).
+    admin_password: Optional[str] = None
+    runtime: Optional[str] = None
+    container_id: Optional[str] = None
 
 
 @pytest.fixture(scope="session")
 def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance]:
-    """Start an ephemeral Forgejo-aneksajo container for testing.
+    """Provide a Forgejo-aneksajo instance for testing.
 
-    Only skips when no container runtime is found (and ``--forgejo`` is
-    not given).  All other failures (pull, start, etc.) are always fatal.
+    By default starts an ephemeral container; set
+    ``DATALAD_TESTS_FORGEJO_URL`` (and ``DATALAD_TESTS_FORGEJO_TOKEN``) to
+    instead run the tests against an existing externally-managed
+    Forgejo-aneksajo deployment, bypassing container management entirely.
+
+    Only skips when no container runtime is found (and ``--no-forgejo``
+    is given).  All other failures (pull, start, etc.) are always fatal.
 
     Environment variables:
 
+    * ``DATALAD_TESTS_FORGEJO_URL`` — externally-managed Forgejo-aneksajo
+      base URL (e.g. ``https://hub.datalad.org``).  When set, no
+      container is started; ``DATALAD_TESTS_FORGEJO_TOKEN`` is required.
+    * ``DATALAD_TESTS_FORGEJO_TOKEN`` — API token for the external
+      instance (must have ``write:repository`` scope).
     * ``DATALAD_TESTS_CONTAINER_RUNTIME`` — force ``podman`` or ``docker``
     * ``DATALAD_TESTS_CONTAINER_PERSIST`` — keep container across runs
     * ``DATALAD_TESTS_CONTAINER_PULL``  — set to ``0`` to skip image pull
@@ -166,6 +188,33 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
     # --no-forgejo: skip instead of fail; default is strict (fail on errors)
     strict = not no_forgejo
     network = not no_network
+
+    # Externally-managed instance — skip all container management.
+    if external_url := os.environ.get("DATALAD_TESTS_FORGEJO_URL"):
+        api_token = os.environ.get("DATALAD_TESTS_FORGEJO_TOKEN")
+        if not api_token:
+            pytest.fail(
+                "DATALAD_TESTS_FORGEJO_URL is set but "
+                "DATALAD_TESTS_FORGEJO_TOKEN is not; provide an API token "
+                "for the externally-managed Forgejo-aneksajo instance."
+            )
+        assert api_token is not None  # narrow type for mypy
+        url = external_url.rstrip("/")
+        try:
+            admin_user = _resolve_user_from_token(url, api_token)
+        except requests.RequestException as exc:
+            pytest.fail(
+                f"Could not reach external Forgejo at {url} or the "
+                f"provided DATALAD_TESTS_FORGEJO_TOKEN is invalid: {exc}"
+            )
+        lgr.info("Using external Forgejo at %s as user %s", url, admin_user)
+        yield ForgejoInstance(
+            url=url,
+            admin_user=admin_user,
+            api_token=api_token,
+        )
+        return
+
     runtime = _find_container_runtime(strict=strict)
     persist = os.environ.get("DATALAD_TESTS_CONTAINER_PERSIST")
     do_pull = os.environ.get("DATALAD_TESTS_CONTAINER_PULL", "1") != "0"

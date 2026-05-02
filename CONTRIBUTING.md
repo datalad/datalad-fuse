@@ -37,11 +37,27 @@ tox -e py3
 
 #### Environment variables
 
-| Variable                           | Default          | Description                                                  |
-|------------------------------------|------------------|--------------------------------------------------------------|
-| `DATALAD_TESTS_CONTAINER_RUNTIME`  | *(auto-detect)*  | Force `podman` or `docker`                                   |
-| `DATALAD_TESTS_CONTAINER_PERSIST`  | *(unset)*        | Keep container running across test runs for faster iteration  |
-| `DATALAD_TESTS_CONTAINER_PULL`     | `1`              | Set to `0` to skip pulling the container image               |
+| Variable                           | Default          | Description                                                              |
+|------------------------------------|------------------|--------------------------------------------------------------------------|
+| `DATALAD_TESTS_FORGEJO_URL`        | *(unset)*        | Run against this externally-managed Forgejo-aneksajo URL (no container)  |
+| `DATALAD_TESTS_FORGEJO_TOKEN`      | *(unset)*        | API token for the external instance; required when `…_URL` is set        |
+| `DATALAD_TESTS_CONTAINER_RUNTIME`  | *(auto-detect)*  | Force `podman` or `docker`                                               |
+| `DATALAD_TESTS_CONTAINER_PERSIST`  | *(unset)*        | Keep container running across test runs for faster iteration            |
+| `DATALAD_TESTS_CONTAINER_PULL`     | `1`              | Set to `0` to skip pulling the container image                           |
+
+#### Running against an external Forgejo-aneksajo instance
+
+To validate the test suite against an existing deployment (e.g.
+`hub.datalad.org`) instead of booting a local container, set:
+
+```bash
+export DATALAD_TESTS_FORGEJO_URL=https://hub.datalad.org
+export DATALAD_TESTS_FORGEJO_TOKEN=<api-token>     # write:repository scope
+tox -e py3 -- -k forgejo
+```
+
+The token's user account will own the test repos; each test repo has a
+random name (`test-annex-XXXXXXXX`) and is deleted on teardown.
 
 #### Container image
 
