@@ -18,8 +18,8 @@ from .conftest_forgejo import (
     ForgejoInstance,
     ForgejoRepo,
     _find_container_runtime,
-    _fix_clone_url,
     _make_external_instance,
+    _map_to_external_address,
     _resolve_user_from_token,
     _skip_or_fail,
 )
@@ -149,27 +149,44 @@ def test_open_via_forgejo(
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    "api_clone_url,instance_url,expected",
+    "url,instance_url,expected",
     [
+        # plain clone URL — host and port both swapped
         (
             "http://localhost:3000/admin/foo.git",
             "http://127.0.0.1:54321",
             "http://127.0.0.1:54321/admin/foo.git",
         ),
+        # https + trailing slash on instance_url (must be stripped)
         (
             "https://localhost:3000/x/y.git",
             "https://example.com:8080/",
             "https://example.com:8080/x/y.git",
         ),
-        (  # only the first scheme://host:port is rewritten
+        # only the first scheme://authority is rewritten — query strings
+        # containing other URLs are preserved as-is.
+        (
             "http://localhost:3000/a/b/c?u=http://elsewhere/",
             "http://h:1",
             "http://h:1/a/b/c?u=http://elsewhere/",
         ),
+        # compound scheme (annex+http) — used for git-annex annexurl.
+        # Scheme is preserved; only the authority is swapped.
+        (
+            "annex+http://localhost:3000/git-annex-p2phttp",
+            "http://127.0.0.1:54321",
+            "annex+http://127.0.0.1:54321/git-annex-p2phttp",
+        ),
+        # already-external URL — no-op (relevant for DATALAD_TESTS_FORGEJO_URL).
+        (
+            "https://hub.datalad.org/test-resources/foo.git",
+            "https://hub.datalad.org",
+            "https://hub.datalad.org/test-resources/foo.git",
+        ),
     ],
 )
-def test_fix_clone_url(api_clone_url: str, instance_url: str, expected: str) -> None:
-    assert _fix_clone_url(api_clone_url, instance_url) == expected
+def test_map_to_external_address(url: str, instance_url: str, expected: str) -> None:
+    assert _map_to_external_address(url, instance_url) == expected
 
 
 @pytest.mark.ai_generated

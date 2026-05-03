@@ -18,6 +18,7 @@ import subprocess
 import time
 from time import sleep
 from typing import Iterator, Optional
+from urllib.parse import urlparse
 import uuid as uuid_mod
 
 from datalad.api import Dataset
@@ -333,16 +334,27 @@ class ForgejoRepo:
     instance: ForgejoInstance
 
 
-def _fix_clone_url(api_clone_url: str, instance_url: str) -> str:
-    """Replace host:port in the API-returned clone URL with the real one.
+def _map_to_external_address(url: str, instance_url: str) -> str:
+    """Rewrite the ``scheme://host:port`` prefix of *url* to the external one.
 
-    Forgejo inside the container returns ``http://localhost:FORGEJO_INTERNAL_PORT/…``
-    but the container's FORGEJO_INTERNAL_PORT is mapped to a dynamic host port.
+    Forgejo inside the container reports its own URL as
+    ``http://localhost:FORGEJO_INTERNAL_PORT/…``, and git-annex auto-
+    discovers ``annex+http://localhost:FORGEJO_INTERNAL_PORT/git-annex-p2phttp``.
+    Both must be rewritten to the externally-mapped ``host:port`` we
+    expose for tests to reach the server.
+
+    The compound scheme ``annex+http`` is preserved (we only swap the
+    authority, not the scheme).
+
+    For an externally-managed instance (``DATALAD_TESTS_FORGEJO_URL``)
+    the server's ``ROOT_URL`` is already correct, so this is a no-op —
+    safe to call unconditionally.
     """
+    external = urlparse(instance_url.rstrip("/"))
     return re.sub(
-        r"https?://[^/]+",
-        instance_url.rstrip("/"),
-        api_clone_url,
+        r"^([a-zA-Z+]+)://[^/]+",
+        lambda m: f"{m.group(1)}://{external.netloc}",
+        url,
         count=1,
     )
 
@@ -360,38 +372,45 @@ def forgejo_repo(
     """
     repo_name = f"test-annex-{uuid_mod.uuid4().hex[:8]}"
 
-    # Create an empty repo on Forgejo (no auto_init — we push our content)
-    resp = requests.post(
-        f"{forgejo_instance.url}/api/v1/user/repos",
-        headers={"Authorization": f"token {forgejo_instance.api_token}"},
-        json={"name": repo_name, "auto_init": False, "default_branch": "main"},
-    )
-    resp.raise_for_status()
-
-    remote_url = _fix_clone_url(
-        resp.json()["clone_url"],
-        forgejo_instance.url,
-    )
-    # Put the token in the username field with an empty password.
-    # Forgejo accepts API tokens as usernames, and this avoids a
-    # git-annex bug where it sends "..." instead of the actual password
-    # from the URL.  See https://git-annex.branchable.com/bugs/...
-    auth_url = remote_url.replace(
-        "://",
-        f"://{forgejo_instance.api_token}:@",  # noqa: E231
-    )
-
     local_path = tmp_path_factory.mktemp("forgejo_repo") / repo_name
     test_content = b"Hello from datalad-fuse forgejo test!\n" * 100
     test_file = "testfile.bin"
 
     try:
-        # Create dataset locally — same pattern as url_dataset / big_url_dataset
+        # Create dataset locally first so we can ask the Forgejo API to
+        # use the same default branch (respecting the user's
+        # ``init.defaultBranch`` instead of hardcoding "main").
         ds = Dataset(local_path).create()
         (local_path / test_file).write_bytes(test_content)
         ds.save(message="Add test file")
 
         annex_key = ds.repo.get_file_annexinfo(test_file)["key"]
+        default_branch = ds.repo.get_active_branch() or "main"
+
+        # Create the empty repo on Forgejo (no auto_init — we push our content).
+        resp = requests.post(
+            f"{forgejo_instance.url}/api/v1/user/repos",
+            headers={"Authorization": f"token {forgejo_instance.api_token}"},
+            json={
+                "name": repo_name,
+                "auto_init": False,
+                "default_branch": default_branch,
+            },
+        )
+        resp.raise_for_status()
+
+        remote_url = _map_to_external_address(
+            resp.json()["clone_url"],
+            forgejo_instance.url,
+        )
+        # Put the token in the username field with an empty password.
+        # Forgejo accepts API tokens as usernames, and this avoids a
+        # git-annex bug where it sends "..." instead of the actual password
+        # from the URL.  See https://git-annex.branchable.com/bugs/...
+        auth_url = remote_url.replace(
+            "://",
+            f"://{forgejo_instance.api_token}:@",  # noqa: E231
+        )
 
         # Allow git-annex to connect to localhost (needed to fetch the
         # remote's .git/config and discover its annex UUID).
@@ -430,18 +449,25 @@ def forgejo_repo(
             "remote.forgejo.annex-uuid not set after push — "
             "git-annex could not discover the remote"
         )
-        # git-annex auto-discovers annexurl from the remote but uses
-        # the internal container port (localhost:3000) instead of the
-        # mapped host port.  Fix it up.
+        # git-annex auto-discovers annexurl from the remote, but for our
+        # local container it points at the *internal* host:port
+        # (localhost:3000) which the host cannot reach — see
         # https://git-annex.branchable.com/bugs/annex_overwrites_existing_p2p_annexurl/
-        correct_annexurl = f"annex+{forgejo_instance.url}/git-annex-p2phttp"
-        ds.repo.call_git(
-            [
-                "config",
-                "remote.forgejo.annexurl",
-                correct_annexurl,
-            ]
-        )
+        # Read what git-annex set, rewrite the host:port part to the
+        # external one (no-op for DATALAD_TESTS_FORGEJO_URL), write back.
+        discovered_annexurl = ds.config.get("remote.forgejo.annexurl")
+        if discovered_annexurl:
+            correct_annexurl = _map_to_external_address(
+                discovered_annexurl, forgejo_instance.url
+            )
+            if correct_annexurl != discovered_annexurl:
+                ds.repo.call_git(
+                    [
+                        "config",
+                        "remote.forgejo.annexurl",
+                        correct_annexurl,
+                    ]
+                )
 
         assert not ds.config.get("remote.forgejo.annex-ignore"), (
             "remote.forgejo.annex-ignore is set — " "git-annex is ignoring this remote"
