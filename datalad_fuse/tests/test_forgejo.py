@@ -14,7 +14,15 @@ import requests
 
 from datalad_fuse.fsspec import DatasetAdapter, _is_aneksajo
 
-from .conftest_forgejo import ForgejoInstance, ForgejoRepo
+from .conftest_forgejo import (
+    ForgejoInstance,
+    ForgejoRepo,
+    _find_container_runtime,
+    _fix_clone_url,
+    _make_external_instance,
+    _resolve_user_from_token,
+    _skip_or_fail,
+)
 
 pytestmark = pytest.mark.network
 
@@ -131,3 +139,136 @@ def test_open_via_forgejo(
     da = DatasetAdapter(str(forgejo_repo.local_path), caching=False)
     with da.open(forgejo_repo.relpath) as f:
         assert f.read() == forgejo_repo.content
+
+
+# -- Unit tests for conftest helpers ------------------------------------------
+# These exercise pure / near-pure helpers without needing a fresh container,
+# providing coverage for the External-URL code path and a few small utility
+# functions.
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "api_clone_url,instance_url,expected",
+    [
+        (
+            "http://localhost:3000/admin/foo.git",
+            "http://127.0.0.1:54321",
+            "http://127.0.0.1:54321/admin/foo.git",
+        ),
+        (
+            "https://localhost:3000/x/y.git",
+            "https://example.com:8080/",
+            "https://example.com:8080/x/y.git",
+        ),
+        (  # only the first scheme://host:port is rewritten
+            "http://localhost:3000/a/b/c?u=http://elsewhere/",
+            "http://h:1",
+            "http://h:1/a/b/c?u=http://elsewhere/",
+        ),
+    ],
+)
+def test_fix_clone_url(api_clone_url: str, instance_url: str, expected: str) -> None:
+    assert _fix_clone_url(api_clone_url, instance_url) == expected
+
+
+@pytest.mark.ai_generated
+def test_resolve_user_from_token_valid(forgejo_instance: ForgejoInstance) -> None:
+    """A valid token resolves to the admin user."""
+    user = _resolve_user_from_token(forgejo_instance.url, forgejo_instance.api_token)
+    assert user == forgejo_instance.admin_user
+
+
+@pytest.mark.ai_generated
+def test_resolve_user_from_token_invalid(
+    forgejo_instance: ForgejoInstance,
+) -> None:
+    """An invalid token raises HTTPError."""
+    with pytest.raises(requests.HTTPError):
+        _resolve_user_from_token(forgejo_instance.url, "definitely-not-a-real-token")
+
+
+@pytest.mark.ai_generated
+def test_make_external_instance_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No env var → returns None (fixture falls through to container)."""
+    monkeypatch.delenv("DATALAD_TESTS_FORGEJO_URL", raising=False)
+    monkeypatch.delenv("DATALAD_TESTS_FORGEJO_TOKEN", raising=False)
+    assert _make_external_instance() is None
+
+
+@pytest.mark.ai_generated
+def test_make_external_instance_set(
+    forgejo_instance: ForgejoInstance,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """URL+token env vars produce a matching ForgejoInstance."""
+    monkeypatch.setenv("DATALAD_TESTS_FORGEJO_URL", forgejo_instance.url)
+    monkeypatch.setenv("DATALAD_TESTS_FORGEJO_TOKEN", forgejo_instance.api_token)
+    instance = _make_external_instance()
+    assert instance is not None
+    assert instance.url == forgejo_instance.url.rstrip("/")
+    assert instance.admin_user == forgejo_instance.admin_user
+    assert instance.api_token == forgejo_instance.api_token
+    # External instances do not own a container.
+    assert instance.runtime is None
+    assert instance.container_id is None
+
+
+@pytest.mark.ai_generated
+def test_make_external_instance_url_without_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """URL without token must fail loudly (operator error, not skip)."""
+    monkeypatch.setenv("DATALAD_TESTS_FORGEJO_URL", "http://example.invalid")
+    monkeypatch.delenv("DATALAD_TESTS_FORGEJO_TOKEN", raising=False)
+    with pytest.raises(pytest.fail.Exception, match="DATALAD_TESTS_FORGEJO_TOKEN"):
+        _make_external_instance()
+
+
+@pytest.mark.ai_generated
+def test_make_external_instance_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unreachable URL must fail with a useful message."""
+    monkeypatch.setenv("DATALAD_TESTS_FORGEJO_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("DATALAD_TESTS_FORGEJO_TOKEN", "irrelevant")
+    with pytest.raises(pytest.fail.Exception, match="Could not reach"):
+        _make_external_instance()
+
+
+@pytest.mark.ai_generated
+def test_skip_or_fail_strict() -> None:
+    """strict=True raises Failed."""
+    with pytest.raises(pytest.fail.Exception, match="boom"):
+        _skip_or_fail("boom", strict=True)
+
+
+@pytest.mark.ai_generated
+def test_skip_or_fail_lenient() -> None:
+    """strict=False raises Skipped (caught here, not propagated)."""
+    with pytest.raises(pytest.skip.Exception, match="boom"):
+        _skip_or_fail("boom", strict=False)
+
+
+@pytest.mark.ai_generated
+def test_find_container_runtime_explicit_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DATALAD_TESTS_CONTAINER_RUNTIME=foo with foo on PATH returns 'foo'."""
+    monkeypatch.setenv("DATALAD_TESTS_CONTAINER_RUNTIME", "echo")
+    # 'echo' is universally on PATH; using it avoids monkeypatching shutil.which
+    assert _find_container_runtime(strict=True) == "echo"
+
+
+@pytest.mark.ai_generated
+def test_find_container_runtime_explicit_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit runtime not on PATH → fail (strict) / skip (lenient)."""
+    monkeypatch.setenv("DATALAD_TESTS_CONTAINER_RUNTIME", "no-such-runtime-xyz")
+    with pytest.raises(pytest.fail.Exception, match="no-such-runtime-xyz"):
+        _find_container_runtime(strict=True)
+    with pytest.raises(pytest.skip.Exception, match="no-such-runtime-xyz"):
+        _find_container_runtime(strict=False)

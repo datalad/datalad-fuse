@@ -67,7 +67,7 @@ def _find_container_runtime(*, strict: bool) -> str:
         "No container runtime (podman/docker) available",
         strict=strict,
     )
-    return ""  # unreachable, keeps type checkers happy
+    return ""  # pragma: no cover  (unreachable; _skip_or_fail always raises)
 
 
 def _run(
@@ -90,7 +90,9 @@ def _get_host_port(runtime: str, container_id: str) -> int:
     for line in r.stdout.strip().splitlines():
         if ":" in line:
             return int(line.rsplit(":", 1)[1])
-    raise RuntimeError(f"Could not determine host port: {r.stdout!r}")
+    raise RuntimeError(  # pragma: no cover  (defensive; podman always lists)
+        f"Could not determine host port: {r.stdout!r}"
+    )
 
 
 def _wait_for_forgejo(url: str, timeout: int = 60) -> None:
@@ -104,7 +106,9 @@ def _wait_for_forgejo(url: str, timeout: int = 60) -> None:
         except requests.ConnectionError:
             pass
         time.sleep(2)
-    raise RuntimeError(f"Forgejo at {url} not ready within {timeout}s")
+    raise RuntimeError(  # pragma: no cover  (timeout — not reproduced in CI)
+        f"Forgejo at {url} not ready within {timeout}s"
+    )
 
 
 def _create_admin(runtime: str, container_id: str) -> None:
@@ -160,6 +164,45 @@ class ForgejoInstance:
     container_id: Optional[str] = None
 
 
+def _make_external_instance() -> Optional[ForgejoInstance]:
+    """Build a :class:`ForgejoInstance` from ``DATALAD_TESTS_FORGEJO_*`` env.
+
+    Returns ``None`` if ``DATALAD_TESTS_FORGEJO_URL`` is unset.  When the
+    URL is set but the token is missing, or the URL/token pair fails to
+    authenticate, calls :func:`pytest.fail` (these are operator errors,
+    not "skip" conditions).
+
+    Extracted from :func:`forgejo_instance` so it can be unit-tested
+    directly without the session-scoped fixture caching getting in the
+    way.
+    """
+    external_url = os.environ.get("DATALAD_TESTS_FORGEJO_URL")
+    if not external_url:
+        return None
+    api_token = os.environ.get("DATALAD_TESTS_FORGEJO_TOKEN")
+    if not api_token:
+        pytest.fail(
+            "DATALAD_TESTS_FORGEJO_URL is set but "
+            "DATALAD_TESTS_FORGEJO_TOKEN is not; provide an API token "
+            "for the externally-managed Forgejo-aneksajo instance."
+        )
+    assert api_token is not None  # narrow type for mypy
+    url = external_url.rstrip("/")
+    try:
+        admin_user = _resolve_user_from_token(url, api_token)
+    except requests.RequestException as exc:
+        pytest.fail(
+            f"Could not reach external Forgejo at {url} or the "
+            f"provided DATALAD_TESTS_FORGEJO_TOKEN is invalid: {exc}"
+        )
+    lgr.info("Using external Forgejo at %s as user %s", url, admin_user)
+    return ForgejoInstance(
+        url=url,
+        admin_user=admin_user,
+        api_token=api_token,
+    )
+
+
 @pytest.fixture(scope="session")
 def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance]:
     """Provide a Forgejo-aneksajo instance for testing.
@@ -190,29 +233,8 @@ def forgejo_instance(request: pytest.FixtureRequest) -> Iterator[ForgejoInstance
     network = not no_network
 
     # Externally-managed instance — skip all container management.
-    if external_url := os.environ.get("DATALAD_TESTS_FORGEJO_URL"):
-        api_token = os.environ.get("DATALAD_TESTS_FORGEJO_TOKEN")
-        if not api_token:
-            pytest.fail(
-                "DATALAD_TESTS_FORGEJO_URL is set but "
-                "DATALAD_TESTS_FORGEJO_TOKEN is not; provide an API token "
-                "for the externally-managed Forgejo-aneksajo instance."
-            )
-        assert api_token is not None  # narrow type for mypy
-        url = external_url.rstrip("/")
-        try:
-            admin_user = _resolve_user_from_token(url, api_token)
-        except requests.RequestException as exc:
-            pytest.fail(
-                f"Could not reach external Forgejo at {url} or the "
-                f"provided DATALAD_TESTS_FORGEJO_TOKEN is invalid: {exc}"
-            )
-        lgr.info("Using external Forgejo at %s as user %s", url, admin_user)
-        yield ForgejoInstance(
-            url=url,
-            admin_user=admin_user,
-            api_token=api_token,
-        )
+    if (external_instance := _make_external_instance()) is not None:
+        yield external_instance
         return
 
     runtime = _find_container_runtime(strict=strict)
