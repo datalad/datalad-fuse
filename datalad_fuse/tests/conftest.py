@@ -14,6 +14,8 @@ from datalad.api import Dataset, clone
 import pytest
 import requests
 
+from .conftest_forgejo import forgejo_instance, forgejo_repo  # noqa: F401
+
 DATA_DIR = Path(__file__).with_name("data")
 
 lgr = logging.getLogger("datalad.fuse.tests")
@@ -52,16 +54,22 @@ def pytest_addoption(parser) -> None:
         help="Enable fuse tests",
     )
     parser.addoption(
-        "--network",
+        "--no-forgejo",
         action="store_true",
         default=False,
-        help="Enable tests that hit the public network",
+        help="Disable Forgejo-aneksajo integration tests",
+    )
+    parser.addoption(
+        "--no-network",
+        action="store_true",
+        default=False,
+        help="Disable tests that hit the public network",
     )
 
 
 def pytest_configure(config) -> None:
-    """Block outbound network access when --network is not given."""
-    if not config.getoption("--network", default=False):
+    """Block outbound network access when --no-network is given."""
+    if config.getoption("--no-network", default=False):
         bogus = "http://localhost:19999/"
         for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
             os.environ.setdefault(var, bogus)
@@ -75,8 +83,10 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "libfuse" in item.keywords:
                 item.add_marker(skip_no_libfuse)
-    if not config.getoption("--network"):
-        skip_no_network = pytest.mark.skip(reason="Only run when --network is given")
+    if config.getoption("--no-network"):
+        skip_no_network = pytest.mark.skip(
+            reason="Skipped because --no-network is given"
+        )
         for item in items:
             if "network" in item.keywords:
                 item.add_marker(skip_no_network)

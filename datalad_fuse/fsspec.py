@@ -3,12 +3,15 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from enum import Enum
+import json
 import logging
 import os
 import os.path
 from pathlib import Path
 from types import SimpleNamespace, TracebackType
 from typing import IO, Any, Optional, Tuple, cast
+from urllib.parse import urlparse
+import urllib.request
 
 import aiohttp
 from aiohttp_retry import ListRetry, RetryClient
@@ -124,15 +127,21 @@ class DatasetAdapter:
         )(key)
 
         uuid2remote_url = {}
+        aneksajo_uuids: set[str] = set()
         for r in self.annex.get_remotes():
-            ru = self.annex.config.get(f"remote.{r}.annex-uuid")
-            if ru is None:
+            if (ru := self.annex.config.get(f"remote.{r}.annex-uuid")) is None:
                 continue
-            remote_url = self.annex.config.get(f"remote.{r}.url")
-            if remote_url is None:
+            if (remote_url := self.annex.config.get(f"remote.{r}.url")) is None:
                 continue
             remote_url = self.annex.config.rewrite_url(remote_url)
             uuid2remote_url[ru] = remote_url
+            # Detect Forgejo-aneksajo instances via API probe (cached).
+            # TODO: pushurl could be different from url, should also check
+            #   remote.{r}.pushurl config
+            # TODO: SSH remote URLs not yet supported -- would need to
+            #   derive the HTTP base URL from the SSH URL
+            if is_http_url(remote_url) and _is_aneksajo(remote_url):
+                aneksajo_uuids.add(ru)
 
         for ru in remote_uuids:
             try:
@@ -140,7 +149,14 @@ class DatasetAdapter:
             except KeyError:
                 continue
             if is_http_url(base_url):
-                if base_url.lower().rstrip("/").endswith("/.git"):
+                base_stripped = base_url.rstrip("/")
+                # Forgejo/Gitea with aneksajo: use annex/objects endpoint
+                # which supports HEAD and Range requests.
+                # See https://codeberg.org/forgejo-aneksajo/forgejo-aneksajo/issues/111
+                if ru in aneksajo_uuids and base_stripped.endswith(".git"):
+                    forge_base = base_stripped[:-4].rstrip("/")
+                    yield forge_base + "/" + path_lower
+                if base_stripped.lower().endswith("/.git"):
                     paths = [path_mixed, path_lower]
                 else:
                     paths = [
@@ -150,7 +166,7 @@ class DatasetAdapter:
                         f".git/{path_mixed}",
                     ]
                 for p in paths:
-                    yield base_url.rstrip("/") + "/" + p
+                    yield base_stripped + "/" + p
 
     def open(
         self,
@@ -287,6 +303,43 @@ class FsspecAdapter:
 
 def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
+
+
+_aneksajo_cache: dict[str, bool] = {}
+
+
+def _is_aneksajo(base_url: str) -> bool:
+    """Check if a URL points to a Forgejo-aneksajo instance.
+
+    Probes ``{scheme}://{host}/api/forgejo/v1/version`` and checks whether
+    the version string contains ``git-annex``, which indicates the
+    forgejo-aneksajo fork.
+
+    Results are cached per ``scheme://host:port`` for the process lifetime.
+    """
+    parsed = urlparse(base_url)
+    # Cache key without userinfo so credentials don't fragment the cache
+    host = parsed.hostname or ""
+    port_suffix = f":{parsed.port}" if parsed.port else ""  # noqa: E231
+    cache_key = f"{parsed.scheme}://{host}{port_suffix}"  # noqa: E231
+
+    if cache_key in _aneksajo_cache:
+        return _aneksajo_cache[cache_key]
+
+    try:
+        api_url = f"{cache_key}/api/forgejo/v1/version"
+        req = urllib.request.Request(api_url, method="GET")
+        req.add_header("Accept", "application/json")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            result = "git-annex" in data.get("version", "")
+    except Exception:
+        lgr.debug("_is_aneksajo(%s) probe failed", cache_key, exc_info=True)
+        result = False
+
+    _aneksajo_cache[cache_key] = result
+    lgr.debug("_is_aneksajo(%s) = %s", cache_key, result)
+    return result
 
 
 async def on_request_start(
