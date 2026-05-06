@@ -1,3 +1,32 @@
+# 0.6.0 (Wed May 06 2026)
+
+#### 🚀 Enhancement
+
+- Add support for forgejo-aneksjo [#127](https://github.com/datalad/datalad-fuse/pull/127) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🐛 Bug Fix
+
+- Facelift: bring in changes from template ("manually") [#128](https://github.com/datalad/datalad-fuse/pull/128) ([@yarikoptic](https://github.com/yarikoptic))
+- Pin setuptools<75 to fix build with _datalad_buildsupport [#128](https://github.com/datalad/datalad-fuse/pull/128) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🏠 Internal
+
+- [gh-actions](deps): Bump codecov/codecov-action from 5 to 6 [#130](https://github.com/datalad/datalad-fuse/pull/130) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- [gh-actions](deps): Bump actions/setup-python from 5 to 6 [#123](https://github.com/datalad/datalad-fuse/pull/123) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- [gh-actions](deps): Bump actions/checkout from 4 to 6 [#125](https://github.com/datalad/datalad-fuse/pull/125) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+
+#### 🧪 Tests
+
+- Improve testing -- matrix of runs in tox.ini and used in github CI (single workflow) [#132](https://github.com/datalad/datalad-fuse/pull/132) ([@yarikoptic](https://github.com/yarikoptic))
+- Use ubuntu-22.04 until we fixup NeuroDebian APT for recent debian and ubuntu [#121](https://github.com/datalad/datalad-fuse/pull/121) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 2
+
+- [@dependabot[bot]](https://github.com/dependabot[bot])
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.5.2 (Fri May 16 2025)
 
 #### 🏠 Internal
