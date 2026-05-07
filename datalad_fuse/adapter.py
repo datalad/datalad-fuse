@@ -66,6 +66,9 @@ def create_backends(
     backends: list[Backend] = []
     for name in spec.split(","):
         name = name.strip()
+        if not name:
+            # tolerate stray commas / whitespace, e.g. "remfile,,fsspec"
+            continue
         try:
             if name == "fsspec":
                 backends.append(FsspecBackend(path, caching))

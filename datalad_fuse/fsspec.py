@@ -51,10 +51,12 @@ class FsspecBackend(_Backend):
     def open_url(self, url: str, mode: str = "rb", **kwargs: Any) -> IO:
         try:
             return self.fs.open(url, mode, **kwargs)  # type: ignore[no-any-return]
-        except BlocksizeMismatchError as e:
-            lgr.warning(
-                "Blocksize mismatch for %s: %s; clearing cache and retrying", url, e
-            )
+        except BlocksizeMismatchError:
+            # Eviction only makes sense for CachingFileSystem; on a plain
+            # HTTPFileSystem there is no cache to evict, so re-raise.
+            if not self._caching:
+                raise
+            lgr.warning("Blocksize mismatch for %s; clearing cache and retrying", url)
             self.fs.pop_from_cache(url)
             return self.fs.open(url, mode, **kwargs)  # type: ignore[no-any-return]
 

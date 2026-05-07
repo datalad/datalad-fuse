@@ -121,7 +121,7 @@ def test_abc_compliance(tmp_path) -> None:
 @pytest.mark.ai_generated
 def test_fsspec_open_retries_on_blocksize_mismatch(tmp_path) -> None:
     """First open() raises BlocksizeMismatchError; cache cleared; retry succeeds."""
-    backend = FsspecBackend(tmp_path, caching=False)
+    backend = FsspecBackend(tmp_path, caching=True)
     fake_fs = MagicMock()
     good_handle = BytesIO(b"ok")
     fake_fs.open.side_effect = [BlocksizeMismatchError("mismatch"), good_handle]
@@ -130,6 +130,20 @@ def test_fsspec_open_retries_on_blocksize_mismatch(tmp_path) -> None:
     assert result is good_handle
     fake_fs.pop_from_cache.assert_called_once_with("http://example.com/x.bin")
     assert fake_fs.open.call_count == 2
+
+
+@pytest.mark.ai_generated
+def test_fsspec_open_propagates_blocksize_mismatch_without_caching(tmp_path) -> None:
+    """With caching=False there is no cache to evict; the error must propagate
+    instead of attempting pop_from_cache (which would AttributeError on a
+    plain HTTPFileSystem)."""
+    backend = FsspecBackend(tmp_path, caching=False)
+    fake_fs = MagicMock(spec=["open"])  # no pop_from_cache attribute
+    fake_fs.open.side_effect = BlocksizeMismatchError("mismatch")
+    backend.fs = fake_fs
+    with pytest.raises(BlocksizeMismatchError):
+        backend.open_url("http://example.com/x.bin")
+    assert fake_fs.open.call_count == 1
 
 
 # -- resolve_backends / create_backends tests --------------------------------
@@ -188,6 +202,22 @@ class TestCreateBackends:
     def test_unknown_backend_raises(self, tmp_path) -> None:
         with pytest.raises(ValueError, match="Unknown backend"):
             create_backends("nosuch", tmp_path, caching=False)
+
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            "fsspec,,fsspec",  # double comma
+            "fsspec, ,fsspec",  # comma + whitespace
+            "fsspec,",  # trailing comma
+            ",fsspec",  # leading comma
+            " fsspec , fsspec ",  # internal/external whitespace
+        ],
+    )
+    def test_empty_entries_tolerated(self, tmp_path, spec) -> None:
+        """Stray commas and whitespace in the spec are silently skipped."""
+        backends = create_backends(spec, tmp_path, caching=False)
+        assert all(b.name == "fsspec" for b in backends)
+        assert len(backends) >= 1
 
     def test_unavailable_backend_skipped(self, tmp_path, caplog) -> None:
         with patch("datalad_fuse.remfile._get_remfile", return_value=None):
