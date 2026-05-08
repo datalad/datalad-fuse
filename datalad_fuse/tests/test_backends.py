@@ -354,6 +354,23 @@ class TestRemfileWrapper:
         w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
         assert list(w) == []
 
+    def test_iteration_caps_no_newline(self) -> None:
+        """Binary data without '\\n' must not cause runaway reads.
+
+        The wrapper caps each ``__next__`` at ``_MAX_LINE_BYTES`` so iterating
+        an HDF5 file does not download the whole remote object.
+        """
+        # 3 chunks worth of newline-less bytes (well below 1 MiB cap so the
+        # test stays fast); shrink the cap for the assertion.
+        data = b"x" * (3 * RemfileWrapper._ITER_CHUNK)
+        mock_rf = _make_mock_remfile(data)
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        # Patch the cap to 2 chunks so we can verify the bound takes effect.
+        w._MAX_LINE_BYTES = 2 * RemfileWrapper._ITER_CHUNK
+        first = next(iter(w))
+        assert len(first) == 2 * RemfileWrapper._ITER_CHUNK
+        assert b"\n" not in first
+
     def test_close(self) -> None:
         mock_rf = _make_mock_remfile()
         w = RemfileWrapper(mock_rf, "http://example.com/test.h5")

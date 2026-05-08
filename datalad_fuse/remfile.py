@@ -56,6 +56,10 @@ class RemfileWrapper:
     """
 
     _ITER_CHUNK = 8192
+    # Hard cap on bytes returned per __next__ call.  Without this, iterating
+    # a binary file (e.g. HDF5/NWB) — which has no '\n' — would download the
+    # entire remote file in a single iteration step.
+    _MAX_LINE_BYTES = 1 << 20  # 1 MiB
 
     def __init__(self, remfile_obj: Any, url: str) -> None:
         self._f = remfile_obj
@@ -100,7 +104,8 @@ class RemfileWrapper:
 
     def __next__(self) -> bytes:
         chunks: list[bytes] = []
-        while True:
+        total = 0
+        while total < self._MAX_LINE_BYTES:
             chunk = self._f.read(self._ITER_CHUNK)
             if not chunk:
                 if chunks:
@@ -115,6 +120,10 @@ class RemfileWrapper:
                     self._f.seek(-overshoot, 1)
                 return b"".join(chunks)
             chunks.append(chunk)
+            total += len(chunk)
+        # Hit the cap without finding a newline — return what we have so the
+        # caller still makes progress instead of OOM-ing on a binary file.
+        return b"".join(chunks)
 
     def info(self) -> dict[str, Any]:
         """Minimal info dict matching the fsspec convention.
