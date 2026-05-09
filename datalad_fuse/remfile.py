@@ -45,6 +45,13 @@ class RemfileBackend(Backend):
         return key.suffix.lower() in self.EXTENSIONS
 
     def open_url(self, url: str, mode: str = "rb", **kwargs: Any) -> IO:  # noqa: U100
+        if mode != "rb":
+            # Mirror can_handle()'s mode check: remfile is binary-only, so
+            # refuse text modes explicitly rather than silently returning a
+            # binary stream when called directly (bypassing can_handle()).
+            raise NotImplementedError(
+                f"RemfileBackend only supports mode='rb', got {mode!r}"
+            )
         return cast(IO, RemfileWrapper(self._remfile.File(url), url))
 
 

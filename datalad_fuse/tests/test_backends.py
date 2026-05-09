@@ -82,6 +82,20 @@ class TestRemfileBackendCanHandle:
         assert remfile_backend.can_handle(key, "r") is False
         assert remfile_backend.can_handle(key, "rt") is False
 
+    @pytest.mark.parametrize("mode", ["r", "rt", "w", "wb"])
+    def test_open_url_rejects_non_binary_mode(
+        self, remfile_backend: RemfileBackend, mode: str
+    ) -> None:
+        """open_url() refuses non-'rb' modes even when called directly.
+
+        ``can_handle()`` already returns False for these, so the backend chain
+        will never call open_url() with such a mode in practice — but if a
+        caller bypasses can_handle() we want a loud failure rather than a
+        silently-binary handle.
+        """
+        with pytest.raises(NotImplementedError, match="mode='rb'"):
+            remfile_backend.open_url("http://example.com/x.h5", mode=mode)
+
 
 class TestFsspecBackendCanHandle:
     """FsspecBackend.can_handle always returns True."""
