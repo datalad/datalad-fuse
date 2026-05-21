@@ -5,16 +5,21 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from enum import Enum
+from itertools import chain
 import json
 import logging
 import os
 import os.path
 from pathlib import Path
+import subprocess
 from types import TracebackType
 from typing import IO, Any, Optional, Tuple, cast
 from urllib.parse import urlparse
 import urllib.request
 
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config as BotocoreConfig
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
@@ -269,6 +274,173 @@ class DatasetAdapter:
                 for p in paths:
                     yield base_stripped + "/" + p
 
+    @methodtools.lru_cache(maxsize=1)
+    def _get_exporttree_remotes(self) -> list[dict[str, str]]:
+        """Get S3 exporttree remotes with public URLs.
+
+        Parses the git-annex branch remote.log once (cached per
+        DatasetAdapter instance) to find S3 special remotes configured
+        with ``exporttree=yes`` and a usable ``publicurl``.
+
+        Workaround for legacy datasets that lack proper versioned S3 URLs in
+        their git-annex metadata.  See
+        https://github.com/OpenNeuroOrg/openneuro/issues/3875
+        """
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self.path), "show", "git-annex:remote.log"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            lgr.debug("Could not read git-annex:remote.log for %s", self.path)
+            return []
+
+        remotes: list[dict[str, str]] = []
+        for line in result.stdout.strip().splitlines():
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            uuid = parts[0]
+            config: dict[str, str] = {}
+            for token in parts[1:]:
+                if "=" in token:
+                    k, v = token.split("=", 1)
+                    config[k] = v
+            if (
+                config.get("type") == "S3"
+                and config.get("exporttree") == "yes"
+                and config.get("publicurl", "no").startswith("http")
+            ):
+                remotes.append(
+                    {
+                        "uuid": uuid,
+                        "publicurl": config["publicurl"].rstrip("/"),
+                        "fileprefix": config.get("fileprefix", ""),
+                        "bucket": config.get("bucket", ""),
+                        "host": config.get("host", "s3.amazonaws.com"),
+                    }
+                )
+        return remotes
+
+    @staticmethod
+    def _list_s3_versions(
+        bucket: str,
+        object_key: str,
+        host: str = "s3.amazonaws.com",
+    ) -> list[dict[str, Any]]:
+        """List all S3 object versions for *object_key* in *bucket*.
+
+        Uses anonymous credentials (for public buckets).
+        """
+        try:
+            endpoint_url = f"https://{host}"
+            client = boto3.client(
+                "s3",
+                endpoint_url=endpoint_url,
+                config=BotocoreConfig(signature_version=UNSIGNED),
+            )
+            response = client.list_object_versions(Bucket=bucket, Prefix=object_key)
+        except Exception as e:
+            lgr.debug("Failed to list S3 versions for %s/%s: %s", bucket, object_key, e)
+            return []
+
+        versions: list[dict[str, Any]] = []
+        for v in response.get("Versions", []):
+            # Only include exact key matches (prefix query may return others)
+            if v.get("Key") == object_key:
+                versions.append(
+                    {
+                        "VersionId": v.get("VersionId", ""),
+                        "Size": v.get("Size", 0),
+                        "ETag": v.get("ETag", ""),
+                        "IsLatest": v.get("IsLatest", False),
+                    }
+                )
+        return versions
+
+    @staticmethod
+    def _match_s3_version(
+        versions: list[dict[str, Any]], expected_size: int
+    ) -> Optional[str]:
+        """Match the correct S3 object version by file size.
+
+        Returns the matched versionId, or ``None`` if no version matches.
+        Raises ``ValueError`` if multiple versions match by size but have
+        different ETags (ambiguous content — refuse to guess).
+        """
+        matches = [v for v in versions if v["Size"] == expected_size]
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return str(matches[0]["VersionId"])
+        # Multiple matches — check ETags
+        etags = {v["ETag"] for v in matches}
+        if len(etags) == 1:
+            # Same content uploaded multiple times; prefer the latest
+            for v in matches:
+                if v["IsLatest"]:
+                    return str(v["VersionId"])
+            return str(matches[0]["VersionId"])
+        raise ValueError(
+            f"Ambiguous S3 versions: {len(matches)} versions match size "
+            f"{expected_size} but have {len(etags)} distinct ETags. "
+            f"Cannot determine correct version."
+        )
+
+    def get_exporttree_urls(self, relpath: str, key: AnnexKey) -> Iterator[str]:
+        """Yield versioned URLs for *relpath* on S3 exporttree remotes.
+
+        Workaround for datasets lacking proper versioned URLs in git-annex
+        metadata.  Constructs URLs from the remote's ``publicurl`` +
+        ``fileprefix`` and resolves the correct S3 object version by matching
+        ``key.size``.
+        """
+        remotes = self._get_exporttree_remotes()
+        if not remotes:
+            return
+
+        for remote in remotes:
+            publicurl = remote["publicurl"]
+            fileprefix = remote["fileprefix"]
+            bucket = remote["bucket"]
+            host = remote["host"]
+            object_key = f"{fileprefix}{relpath}"
+            base_url = f"{publicurl}/{object_key}"
+
+            if key.size is not None:
+                versions = self._list_s3_versions(bucket, object_key, host)
+                if versions:
+                    try:
+                        version_id = self._match_s3_version(versions, key.size)
+                    except ValueError as e:
+                        lgr.warning("%s: %s", relpath, e)
+                        continue
+                    if version_id:
+                        yield f"{base_url}?versionId={version_id}"
+                        continue
+                    else:
+                        lgr.debug(
+                            "%s: no S3 version matches size %d at %s",
+                            relpath,
+                            key.size,
+                            base_url,
+                        )
+                        continue
+
+            # Fallback: no size info or version listing failed —
+            # try unversioned URL (returns latest version).
+            lgr.warning(
+                "%s: falling back to unversioned S3 URL %s "
+                "(cannot verify correct version)",
+                relpath,
+                base_url,
+            )
+            yield base_url
+
     def open(
         self,
         relpath: str,
@@ -305,7 +477,17 @@ class DatasetAdapter:
                     )
                     continue
                 lgr.debug("%s: opening via backend %s", relpath, backend.name)
-                for url in self.get_urls(str(key)):
+                # Primary URLs from git-annex whereis / remote paths, then
+                # S3 exporttree fallback URLs (legacy openneuro datasets that
+                # lack proper versioned URLs in annex metadata).  Lazy so
+                # the boto3 calls only happen when primary URLs fail.
+                primary_urls = self.get_urls(str(key))
+                fallback_urls: Iterator[str] = (
+                    self.get_exporttree_urls(relpath, key)
+                    if key is not None
+                    else iter([])
+                )
+                for url in chain(primary_urls, fallback_urls):
                     try:
                         lgr.debug(
                             "%s: trying URL %s (backend=%s)",
