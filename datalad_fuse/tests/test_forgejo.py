@@ -12,7 +12,7 @@ import subprocess
 import pytest
 import requests
 
-from datalad_fuse.fsspec import DatasetAdapter, _is_aneksajo
+from datalad_fuse.adapter import DatasetAdapter, _is_aneksajo
 
 from .conftest_forgejo import (
     ForgejoInstance,
