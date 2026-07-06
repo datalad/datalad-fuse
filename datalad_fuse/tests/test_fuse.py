@@ -4,6 +4,7 @@ import hashlib
 import os.path
 from pathlib import Path
 import subprocess
+import time
 from typing import Iterator, Union
 
 from datalad.api import Dataset
@@ -246,7 +247,7 @@ def test_parallel_access(tmp_path, big_url_dataset):
     with fusing(ds.path, tmp_path) as mount:
         with ThreadPoolExecutor() as pool:
             futures = {
-                pool.submit(sha256_file, mount / path): dgst
+                pool.submit(sha256_file_with_retry, mount / path): dgst
                 for path, dgst in data_files.items()
             }
             for fut in as_completed(futures.keys()):
@@ -259,3 +260,18 @@ def sha256_file(path):
         for chunk in iter(lambda: fp.read(65535), b""):
             dgst.update(chunk)
     return dgst.hexdigest()
+
+
+def sha256_file_with_retry(path, attempts=3, delay=1.0):
+    # Absorb transient FUSE-callback errors (e.g. from an exhausted
+    # aiohttp-retry chain on the remote big-file variant).
+    last_exc = None
+    for i in range(attempts):
+        try:
+            return sha256_file(path)
+        except OSError as e:
+            last_exc = e
+            if i < attempts - 1:
+                time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
