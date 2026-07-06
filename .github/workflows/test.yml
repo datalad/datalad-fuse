@@ -25,6 +25,8 @@ jobs:
           - python-version: '3.11'
           - python-version: '3.12'
           - python-version: '3.13'
+          - python-version: '3.13'
+            libfuse: true
           - python-version: '3.14'
             full: true
           - python-version: '3.14'
@@ -57,10 +59,11 @@ jobs:
       run: |
         # give detailed info on actual test setup
         datalad wtf
+        pyver="py$(echo '${{ matrix.python-version }}' | tr -d .)"
         if [ "${{ matrix.full }}" = "true" ]; then
-          tox -e py314-full
+          tox -e "${pyver}-full"
         elif [ "${{ matrix.libfuse }}" = "true" ]; then
-          tox -e py314-libfuse
+          tox -e "${pyver}-libfuse"
         else
           tox
         fi
