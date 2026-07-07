@@ -21,6 +21,7 @@ from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 import methodtools
 
+from . import _fusepy_patch  # noqa: F401  # patches fuse.FUSE._wrapper on import
 from .consts import CACHE_SIZE
 from .fsspec import FsspecAdapter
 

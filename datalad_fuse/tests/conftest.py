@@ -1,11 +1,13 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import logging
 import multiprocessing
 import os
 import os.path
 from pathlib import Path
+import random
 import re
 import time
 from typing import List
@@ -216,10 +218,58 @@ def superdataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U1
     return (ds, {os.path.join("sub", df.path): df.content for df in served_files})
 
 
-@pytest.fixture
-def big_url_dataset(tmp_home, tmp_path_factory):  # noqa: U100
+BIG_LOCAL_SIZES = [
+    (f"big{i}.bin", size) for i, size in enumerate((1_500_000, 2_100_000, 3_000_000))
+]
+
+
+@pytest.fixture(scope="session")
+def big_served_files(tmp_path_factory):
+    """Serve a handful of deterministic >1 MiB files over a local HTTP server.
+
+    Mirrors ``served_files`` but with content large enough to exercise
+    multi-block reads through the FUSE mount without depending on the
+    public network.
+    """
+    workdir = tmp_path_factory.mktemp("big_served_files")
+    rng = random.Random(0xDA7A1AD)
+    for path, size in BIG_LOCAL_SIZES:
+        (workdir / path).write_bytes(rng.randbytes(size))
+    with local_server(workdir) as url:
+        files = []
+        for path, _ in BIG_LOCAL_SIZES:
+            content = (workdir / path).read_bytes()
+            files.append(
+                DataFile(
+                    url=f"{url}/{path}",
+                    path=path,
+                    content=content,
+                )
+            )
+        yield files
+
+
+@pytest.fixture(
+    params=[
+        "local",
+        pytest.param("remote", marks=pytest.mark.network),
+    ]
+)
+def big_url_dataset(
+    request,
+    tmp_home,  # noqa: U100
+    tmp_path_factory,
+    big_served_files,
+):
     workpath = tmp_path_factory.mktemp("big_url_dataset")
     ds = Dataset(workpath / "ds").create()
-    for path, url, _ in BIG_URLS:
+    if request.param == "remote":
+        entries = [(path, url, digest) for path, url, digest in BIG_URLS]
+    else:
+        entries = [
+            (dfile.path, dfile.url, hashlib.sha256(dfile.content).hexdigest())
+            for dfile in big_served_files
+        ]
+    for path, url, _ in entries:
         ds.repo.add_url_to_file(path, url, options=["--relaxed"])
-    yield (ds, {path: digest for path, _, digest in BIG_URLS})
+    yield (ds, {path: digest for path, _, digest in entries})
