@@ -45,7 +45,12 @@ class FsspecBackend(_Backend):
             self.fs = fs
         self._caching = caching
 
-    def can_handle(self, key: Optional[AnnexKey], mode: str) -> bool:  # noqa: U100
+    def can_handle(
+        self,
+        key: Optional[AnnexKey],  # noqa: U100
+        mode: str,  # noqa: U100
+        relpath: Optional[str] = None,  # noqa: U100
+    ) -> bool:
         return True  # fsspec handles everything
 
     def open_url(self, url: str, mode: str = "rb", **kwargs: Any) -> IO:

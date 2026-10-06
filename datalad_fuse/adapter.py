@@ -13,7 +13,7 @@ import os.path
 from pathlib import Path
 import subprocess
 from types import TracebackType
-from typing import IO, Any, Optional, Tuple, cast
+from typing import IO, Any, Callable, Optional, Tuple, cast
 from urllib.parse import urlparse
 import urllib.request
 
@@ -42,8 +42,16 @@ FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
 # ---------------------------------------------------------------------------
 
 
-def resolve_backends(backends: Optional[str] = None) -> tuple[str, bool]:
+def resolve_backends(
+    backends: Optional[str] = None, config: Optional[Any] = None
+) -> tuple[str, bool]:
     """Resolve backends spec from *backends* argument, config, or default.
+
+    *config* is a dataset's :class:`~datalad.config.ConfigManager`, so that a
+    per-dataset ``datalad.fusefs.backends`` in ``.git/config`` or
+    ``.datalad/config`` is honored; it inherits the global overrides (``-c``),
+    so it is a superset of the global ``datalad.cfg``.  Falls back to the
+    global config when not given.
 
     Returns ``(spec, explicit)`` where ``explicit`` is True when the user (or
     config) supplied the spec and False when falling back to
@@ -52,7 +60,9 @@ def resolve_backends(backends: Optional[str] = None) -> tuple[str, bool]:
     """
     if backends is not None:
         return backends, True
-    from_cfg = cfg.get("datalad.fusefs.backends", None)
+    from_cfg = (config if config is not None else cfg).get(
+        "datalad.fusefs.backends", None
+    )
     if from_cfg is not None:
         return str(from_cfg), True
     return DEFAULT_BACKENDS, False
@@ -78,7 +88,7 @@ def create_backends(
             if name == "fsspec":
                 backends.append(FsspecBackend(path, caching))
             elif name == "remfile":
-                backends.append(RemfileBackend())
+                backends.append(RemfileBackend(path, caching))
             else:
                 raise ValueError(f"Unknown backend: {name!r}")
         except ImportError as e:
@@ -98,6 +108,23 @@ def create_backends(
             "datalad.fusefs.backends config."
         )
     return backends
+
+
+def replayable(it: Iterator[str]) -> Callable[[], Iterator[str]]:
+    """Wrap *it* so it can be iterated repeatedly, consuming it only once.
+
+    Each returned iterator replays what has already been pulled from *it*
+    before pulling anything new, so the underlying generator stays lazy.
+    """
+    seen: list[str] = []
+
+    def replay() -> Iterator[str]:
+        yield from seen
+        for item in it:
+            seen.append(item)
+            yield item
+
+    return replay
 
 
 def is_http_url(s: str) -> bool:
@@ -165,7 +192,7 @@ class DatasetAdapter:
         self.commit_dt = datetime.fromtimestamp(
             ds.repo.get_commit_date(), tz=timezone.utc
         )
-        spec, explicit = resolve_backends(backends)
+        spec, explicit = resolve_backends(backends, config=ds.config)
         self._backends = create_backends(spec, path, caching, explicit=explicit)
 
     def close(self) -> None:
@@ -337,7 +364,7 @@ class DatasetAdapter:
         Uses anonymous credentials (for public buckets).
         """
         try:
-            endpoint_url = f"https://{host}"
+            endpoint_url = f"https://{host}"  # noqa: E231
             client = boto3.client(
                 "s3",
                 endpoint_url=endpoint_url,
@@ -464,10 +491,20 @@ class DatasetAdapter:
                 "has" if fstate is FileState.HAS_CONTENT else "does not have",
             )
         if fstate is FileState.NO_CONTENT:
+            # Primary URLs from git-annex whereis / remote paths, then S3
+            # exporttree fallback URLs (legacy openneuro datasets that lack
+            # proper versioned URLs in annex metadata).  Lazy, so the whereis /
+            # examinekey / boto3 calls only happen when a backend actually asks
+            # for URLs, and replayable, so a backend falling through to the next
+            # one does not repeat them.
+            fallback_urls: Iterator[str] = (
+                self.get_exporttree_urls(relpath, key) if key is not None else iter([])
+            )
+            urls = replayable(chain(self.get_urls(str(key)), fallback_urls))
             # Walk the backend chain; fall through to next backend on failure
             last_error: Optional[Exception] = None
             for backend in self._backends:
-                if not backend.can_handle(key, mode):
+                if not backend.can_handle(key, mode, relpath):
                     lgr.debug(
                         "%s: backend %s cannot handle (suffix=%s, mode=%s)",
                         relpath,
@@ -477,17 +514,7 @@ class DatasetAdapter:
                     )
                     continue
                 lgr.debug("%s: opening via backend %s", relpath, backend.name)
-                # Primary URLs from git-annex whereis / remote paths, then
-                # S3 exporttree fallback URLs (legacy openneuro datasets that
-                # lack proper versioned URLs in annex metadata).  Lazy so
-                # the boto3 calls only happen when primary URLs fail.
-                primary_urls = self.get_urls(str(key))
-                fallback_urls: Iterator[str] = (
-                    self.get_exporttree_urls(relpath, key)
-                    if key is not None
-                    else iter([])
-                )
-                for url in chain(primary_urls, fallback_urls):
+                for url in urls():
                     try:
                         lgr.debug(
                             "%s: trying URL %s (backend=%s)",

@@ -49,8 +49,8 @@ class TestRemfileBackendCanHandle:
     pytestmark = pytest.mark.ai_generated
 
     @pytest.fixture()
-    def remfile_backend(self) -> RemfileBackend:
-        return RemfileBackend()
+    def remfile_backend(self, tmp_path) -> RemfileBackend:
+        return RemfileBackend(tmp_path, caching=False)
 
     @pytest.mark.parametrize("ext", sorted(RemfileBackend.EXTENSIONS))
     def test_hdf5_extensions_accepted(
@@ -65,6 +65,25 @@ class TestRemfileBackendCanHandle:
     ) -> None:
         key = AnnexKey(backend="MD5E", name="abc123", size=100, suffix=ext)
         assert remfile_backend.can_handle(key, "rb") is False
+
+    def test_suffixless_key_falls_back_to_relpath(
+        self, remfile_backend: RemfileBackend
+    ) -> None:
+        """URL/VURL keys carry no suffix; dispatch on the path the user sees.
+
+        ``git annex addurl --fast/--relaxed`` (and ``datalad addurls --fast``)
+        produce such keys, so an .nwb file would otherwise never reach remfile.
+        """
+        key = AnnexKey(backend="VURL", name="abc123", size=None, suffix=None)
+        assert remfile_backend.can_handle(key, "rb", "sub-01/sub-01.nwb") is True
+        assert remfile_backend.can_handle(key, "rb", "README.md") is False
+        assert remfile_backend.can_handle(None, "rb", "x.h5") is True
+
+    def test_key_suffix_wins_over_relpath(
+        self, remfile_backend: RemfileBackend
+    ) -> None:
+        key = AnnexKey(backend="MD5E", name="abc123", size=100, suffix=".nwb")
+        assert remfile_backend.can_handle(key, "rb", "renamed.txt") is True
 
     def test_no_suffix_rejected(self, remfile_backend: RemfileBackend) -> None:
         key = AnnexKey(backend="MD5", name="abc123", size=100, suffix=None)
@@ -97,6 +116,116 @@ class TestRemfileBackendCanHandle:
             remfile_backend.open_url("http://example.com/x.h5", mode=mode)
 
 
+def _mock_remfile_backend(tmp_path, caching: bool = False):
+    """Build a RemfileBackend against a stand-in ``remfile`` module.
+
+    Lets the probe / disk-cache behaviour be tested without remfile installed.
+    """
+    fake = MagicMock()
+    with patch("datalad_fuse.remfile._get_remfile", return_value=fake):
+        return RemfileBackend(tmp_path, caching=caching), fake
+
+
+def _probe_response(headers: dict, status: int = 206) -> MagicMock:
+    resp = MagicMock()
+    resp.headers = headers
+    resp.status = status
+    resp.__enter__ = MagicMock(return_value=resp)
+    resp.__exit__ = MagicMock(return_value=None)
+    return resp
+
+
+@pytest.mark.ai_generated
+class TestRemfileBackendProbe:
+    """open_url() probes the size itself instead of letting remfile do it.
+
+    remfile retries its own ``Content-Length`` probe 8x with backoff (~25 s),
+    so an unreachable URL would stall the backend chain — and, in ``fusefs``,
+    the whole mount, since ``open()`` holds the global rwlock.
+    """
+
+    def test_probe_result_passed_to_remfile(self, tmp_path, monkeypatch) -> None:
+        backend, fake = _mock_remfile_backend(tmp_path)
+        resp = _probe_response({"Content-Range": "bytes 0-0/177728"})
+        urlopen = MagicMock(return_value=resp)
+        monkeypatch.setattr("urllib.request.urlopen", urlopen)
+        backend.open_url("http://example.com/x.h5")
+        assert fake.File.call_args.kwargs["_size"] == 177728
+        # A short, retry-free timeout is the point of probing here.
+        assert urlopen.call_args.kwargs["timeout"] == RemfileBackend.PROBE_TIMEOUT
+        req = urlopen.call_args.args[0]
+        assert req.get_header("Range") == "bytes=0-0"
+
+    def test_probe_falls_back_to_content_length(self, tmp_path, monkeypatch) -> None:
+        """A server that ignores Range answers 200 with the full length."""
+        backend, fake = _mock_remfile_backend(tmp_path)
+        resp = _probe_response({"Content-Length": "4096"}, status=200)
+        monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=resp))
+        backend.open_url("http://example.com/x.h5")
+        assert fake.File.call_args.kwargs["_size"] == 4096
+
+    def test_unknown_size_lets_remfile_probe(self, tmp_path, monkeypatch) -> None:
+        """An unparsable size is not fatal — remfile falls back to its own."""
+        backend, fake = _mock_remfile_backend(tmp_path)
+        resp = _probe_response({"Content-Range": "bytes 0-0/*"})
+        monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=resp))
+        backend.open_url("http://example.com/x.h5")
+        assert fake.File.call_args.kwargs["_size"] is None
+
+    def test_probe_failure_propagates_without_opening(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """A dead URL fails at the probe, so the chain moves on immediately."""
+        backend, fake = _mock_remfile_backend(tmp_path)
+        monkeypatch.setattr(
+            "urllib.request.urlopen", MagicMock(side_effect=OSError("unreachable"))
+        )
+        with pytest.raises(OSError, match="unreachable"):
+            backend.open_url("http://example.com/x.h5")
+        fake.File.assert_not_called()
+
+
+@pytest.mark.ai_generated
+class TestRemfileBackendCaching:
+    """``--caching=ondisk`` must apply to remfile-handled files too."""
+
+    def test_no_disk_cache_without_caching(self, tmp_path) -> None:
+        backend, fake = _mock_remfile_backend(tmp_path, caching=False)
+        fake.DiskCache.assert_not_called()
+        with patch("urllib.request.urlopen", MagicMock(side_effect=OSError("x"))):
+            pass
+        assert backend._disk_cache is None
+
+    def test_disk_cache_under_dataset_git_dir(self, tmp_path) -> None:
+        backend, fake = _mock_remfile_backend(tmp_path, caching=True)
+        expected = str(tmp_path / ".git" / "datalad" / "cache" / "remfile")
+        fake.DiskCache.assert_called_once_with(expected)
+        assert backend._disk_cache is fake.DiskCache.return_value
+
+    def test_disk_cache_passed_to_remfile(self, tmp_path, monkeypatch) -> None:
+        backend, fake = _mock_remfile_backend(tmp_path, caching=True)
+        resp = _probe_response({"Content-Range": "bytes 0-0/10"})
+        monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=resp))
+        backend.open_url("http://example.com/x.h5")
+        assert fake.File.call_args.kwargs["disk_cache"] is fake.DiskCache.return_value
+
+    def test_clear_removes_cache_dir(self, tmp_path) -> None:
+        """So ``fsspec-cache-clear`` / ``datalad.fusefs.cache-clear`` work."""
+        backend, _ = _mock_remfile_backend(tmp_path, caching=True)
+        cache_dir = tmp_path / ".git" / "datalad" / "cache" / "remfile"
+        (cache_dir / "ab" / "cd").mkdir(parents=True)
+        (cache_dir / "ab" / "cd" / "chunk").write_bytes(b"x")
+        backend.clear()
+        assert not cache_dir.exists()
+
+    def test_clear_without_caching_is_noop(self, tmp_path) -> None:
+        backend, _ = _mock_remfile_backend(tmp_path, caching=False)
+        cache_dir = tmp_path / ".git" / "datalad" / "cache" / "remfile"
+        cache_dir.mkdir(parents=True)
+        backend.clear()
+        assert cache_dir.exists()
+
+
 class TestFsspecBackendCanHandle:
     """FsspecBackend.can_handle always returns True."""
 
@@ -107,6 +236,7 @@ class TestFsspecBackendCanHandle:
         assert backend.can_handle(key, "rb") is True
         assert backend.can_handle(key, "r") is True
         assert backend.can_handle(None, "rb") is True
+        assert backend.can_handle(None, "rb", "x.nwb") is True
 
 
 # -- ABC compliance shared across backends -----------------------------------
@@ -115,7 +245,7 @@ class TestFsspecBackendCanHandle:
 def _all_backends(tmp_path) -> list[Backend]:
     out: list[Backend] = [FsspecBackend(tmp_path, caching=False)]
     if _has_remfile:
-        out.append(RemfileBackend())
+        out.append(RemfileBackend(tmp_path, caching=False))
     return out
 
 
@@ -204,6 +334,29 @@ class TestResolveBackends:
         assert explicit is True
         get.assert_not_called()
 
+    def test_dataset_config_consulted(self, monkeypatch) -> None:
+        """A dataset's own config must be honored, not just the global one."""
+        global_get = MagicMock(return_value=None)
+        monkeypatch.setattr("datalad_fuse.adapter.cfg.get", global_get)
+        ds_config = MagicMock()
+        ds_config.get.return_value = "fsspec"
+        spec, explicit = resolve_backends(None, config=ds_config)
+        assert spec == "fsspec"
+        assert explicit is True
+        ds_config.get.assert_called_once_with("datalad.fusefs.backends", None)
+        global_get.assert_not_called()
+
+    def test_dataset_config_unset_falls_back_to_default(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "datalad_fuse.adapter.cfg.get",
+            lambda _key, default=None: default,
+        )
+        ds_config = MagicMock()
+        ds_config.get.return_value = None
+        spec, explicit = resolve_backends(None, config=ds_config)
+        assert spec == DEFAULT_BACKENDS
+        assert explicit is False
+
 
 class TestCreateBackends:
     pytestmark = pytest.mark.ai_generated
@@ -261,6 +414,12 @@ class TestCreateBackends:
                 create_backends("remfile", tmp_path, caching=False)
 
     @requires_remfile
+    def test_remfile_gets_path_and_caching(self, tmp_path) -> None:
+        """create_backends must wire --caching through to remfile too."""
+        (backend,) = create_backends("remfile", tmp_path, caching=True)
+        assert backend._disk_cache is not None
+
+    @requires_remfile
     def test_order_preserved(self, tmp_path) -> None:
         backends = create_backends("remfile,fsspec", tmp_path, caching=False)
         assert [b.name for b in backends] == ["remfile", "fsspec"]
@@ -299,31 +458,48 @@ def test_is_http_url(url: str, expected: bool) -> None:
 
 
 def _make_mock_remfile(data: bytes = b"hello world\nline two\n") -> MagicMock:
-    """Create a mock remfile.File object backed by *data*."""
+    """Create a mock ``remfile.File`` object backed by *data*.
+
+    Deliberately mimics ``remfile.RemFile``'s quirks rather than a well-behaved
+    file object, so that the wrapper is tested against what it actually wraps:
+
+    - ``read()`` requires an explicit, non-negative size,
+    - it advances the position by that size even past EOF, and
+    - a read starting at or past EOF issues an unsatisfiable Range request,
+    - ``seek()`` returns ``None``.
+    """
     mock = MagicMock()
     pos = [0]
 
-    def read(size: int = -1) -> bytes:
-        if size == -1:
-            result = data[pos[0] :]
-            pos[0] = len(data)
-            return result
-        result = data[pos[0] : pos[0] + size]
-        pos[0] = min(pos[0] + size, len(data))
-        return result
+    def read(size=None) -> bytes:
+        if size is None:
+            raise Exception("The size argument must be provided in remfile")
+        start = pos[0]
+        pos[0] = start + size  # remfile advances unconditionally
+        if size < 0:
+            # remfile's chunk range comes out empty for a negative size
+            return b""
+        if start >= len(data) and size:
+            raise OSError(
+                f"Error fetching bytes {start}-{start + size - 1}: "
+                "416 Range Not Satisfiable"
+            )
+        return data[start : start + size]
 
-    def seek(offset: int, whence: int = 0) -> int:
+    def seek(offset: int, whence: int = 0) -> None:
         if whence == 0:
             pos[0] = offset
         elif whence == 1:
             pos[0] += offset
         elif whence == 2:
             pos[0] = len(data) + offset
-        return pos[0]
+        else:
+            raise ValueError("Invalid argument: 'whence' must be 0, 1, or 2.")
 
     def tell() -> int:
         return pos[0]
 
+    mock.length = len(data)
     mock.read = read
     mock.seek = seek
     mock.tell = tell
@@ -348,6 +524,52 @@ class TestRemfileWrapper:
         w.seek(3)
         assert w.tell() == 3
         assert w.read(2) == b"de"
+
+    def test_read_without_size_reads_to_eof(self) -> None:
+        """``read()`` with no size must behave like a file object, not remfile.
+
+        ``remfile.RemFile.read(-1)`` returns ``b""`` and moves the position
+        back by one.
+        """
+        mock_rf = _make_mock_remfile(b"abcdef")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        w.seek(2)
+        assert w.read() == b"cdef"
+        assert w.tell() == 6
+        assert w.read() == b""
+
+    def test_read_none_size_reads_to_eof(self) -> None:
+        mock_rf = _make_mock_remfile(b"abcdef")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        assert w.read(None) == b"abcdef"
+
+    def test_read_clamps_at_eof(self) -> None:
+        """An over-long read returns what is there and leaves tell() at EOF."""
+        mock_rf = _make_mock_remfile(b"abcdef")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        w.seek(4)
+        assert w.read(100) == b"ef"
+        assert w.tell() == 6
+
+    def test_read_at_eof_returns_empty(self) -> None:
+        """Reading at EOF must not issue an unsatisfiable Range request.
+
+        remfile raises ``416 Range Not Satisfiable`` for that, which breaks
+        line iteration (and hence ``fsspec-head -n``) whenever the file size is
+        an exact multiple of remfile's chunk size.
+        """
+        mock_rf = _make_mock_remfile(b"abcdef")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        w.seek(6)
+        assert w.read(10) == b""
+        assert w.tell() == 6
+
+    def test_seek_returns_new_position(self) -> None:
+        """``remfile.RemFile.seek()`` returns None; the wrapper declares -> int."""
+        mock_rf = _make_mock_remfile(b"abcdef")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        assert w.seek(3) == 3
+        assert w.seek(-1, 2) == 5
 
     def test_context_manager(self) -> None:
         mock_rf = _make_mock_remfile()
@@ -399,26 +621,17 @@ class TestRemfileWrapper:
         assert w.seekable() is True
         assert w.writable() is False
 
-    def test_info_success(self, monkeypatch) -> None:
-        """info() returns {'type': 'file', 'size': N} when Content-Length present."""
-        fake_resp = MagicMock()
-        fake_resp.headers = {"Content-Length": "1234"}
-        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
-        fake_resp.__exit__ = MagicMock(return_value=None)
-        monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=fake_resp))
-        w = RemfileWrapper(_make_mock_remfile(), "http://example.com/test.h5")
-        assert w.info() == {"type": "file", "size": 1234}
+    def test_info_uses_remfile_length(self) -> None:
+        """info() reports the size remfile already knows, with no HEAD request.
 
-    def test_info_missing_content_length(self, monkeypatch) -> None:
-        """info() raises ValueError when Content-Length header absent."""
-        fake_resp = MagicMock()
-        fake_resp.headers = {}
-        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
-        fake_resp.__exit__ = MagicMock(return_value=None)
-        monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=fake_resp))
-        w = RemfileWrapper(_make_mock_remfile(), "http://example.com/test.h5")
-        with pytest.raises(ValueError, match="Content-Length"):
-            w.info()
+        A HEAD here would break ``fstat()`` on an open FUSE handle whenever the
+        server rejects HEAD, which presigned S3 GET URLs do.
+        """
+        mock_rf = _make_mock_remfile(b"0123456789")
+        w = RemfileWrapper(mock_rf, "http://example.com/test.h5")
+        with patch("urllib.request.urlopen") as urlopen:
+            assert w.info() == {"type": "file", "size": 10}
+        urlopen.assert_not_called()
 
 
 # -- DatasetAdapter backend-chain and RemoteFilesystemAdapter tests ----------
@@ -441,7 +654,7 @@ class _StubBackend(Backend):
         self.open_calls: list[str] = []
         self.clear_calls = 0
 
-    def can_handle(self, key, mode: str) -> bool:  # noqa: U100
+    def can_handle(self, key, mode: str, relpath=None) -> bool:  # noqa: U100
         return self._can
 
     def open_url(self, url: str, mode: str = "rb", **kwargs):  # noqa: U100
@@ -540,6 +753,51 @@ class TestDatasetAdapterOpen:
             adapter.open("x.nwb")
         assert a.open_calls == ["http://u1", "http://u2"]
 
+    def test_urls_enumerated_once_across_backends(self, tmp_path) -> None:
+        """Falling through to the next backend must not re-enumerate URLs.
+
+        ``get_urls()`` runs a ``git annex whereis`` subprocess plus two
+        ``examinekey`` calls, and the exporttree path adds a boto3
+        ``list_object_versions`` call, so repeating it per backend is costly.
+        """
+        a = _StubBackend("a", raises=FileNotFoundError("no"))
+        b = _StubBackend("b", raises=FileNotFoundError("no"))
+        adapter = _make_dataset_adapter_with_backends(
+            tmp_path, [a, b], ["http://u1", "http://u2"]
+        )
+        calls: list[str] = []
+        inner = adapter.get_urls
+
+        def counting_get_urls(key: str) -> Iterator[str]:
+            calls.append(key)
+            yield from inner(key)
+
+        adapter.get_urls = counting_get_urls  # type: ignore[method-assign]
+        with pytest.raises(IOError):
+            adapter.open("x.nwb")
+        assert len(calls) == 1
+        # Every backend still gets offered every URL.
+        assert a.open_calls == ["http://u1", "http://u2"]
+        assert b.open_calls == ["http://u1", "http://u2"]
+
+    def test_urls_not_enumerated_when_no_backend_handles(self, tmp_path) -> None:
+        """URL enumeration stays lazy when nothing can handle the file."""
+        skipper = _StubBackend("skip", can_handle_result=False)
+        adapter = _make_dataset_adapter_with_backends(
+            tmp_path, [skipper], ["http://u1"]
+        )
+        calls: list[str] = []
+        inner = adapter.get_urls
+
+        def counting_get_urls(key: str) -> Iterator[str]:
+            calls.append(key)
+            yield from inner(key)
+
+        adapter.get_urls = counting_get_urls  # type: ignore[method-assign]
+        with pytest.raises(IOError):
+            adapter.open("x.nwb")
+        assert calls == []
+
     def test_clear_delegates_to_backends(self, tmp_path) -> None:
         a = _StubBackend("a")
         b = _StubBackend("b")
@@ -561,7 +819,7 @@ class TestDatasetAdapterOpen:
         class CapturingBackend(Backend):
             name = "cap"
 
-            def can_handle(self, key, mode_):  # noqa: U100
+            def can_handle(self, key, mode_, relpath=None):  # noqa: U100
                 return True
 
             def open_url(self, url, mode_="rb", **kwargs):  # noqa: U100
@@ -719,11 +977,11 @@ def test_on_request_start_logs_retry(caplog) -> None:
 
 
 @pytest.mark.ai_generated
-def test_remfile_backend_raises_when_unavailable(monkeypatch) -> None:
+def test_remfile_backend_raises_when_unavailable(monkeypatch, tmp_path) -> None:
     """RemfileBackend.__init__ raises ImportError when remfile is not installed."""
     monkeypatch.setattr("datalad_fuse.remfile._get_remfile", lambda: None)
     with pytest.raises(ImportError, match="remfile"):
-        RemfileBackend()
+        RemfileBackend(tmp_path, caching=False)
 
 
 @pytest.mark.ai_generated
@@ -768,8 +1026,8 @@ class TestIntegrationRemfileBackend:
     pytestmark = [pytest.mark.ai_generated, pytest.mark.network]
 
     @pytest.fixture()
-    def remfile_backend(self) -> RemfileBackend:
-        return RemfileBackend()
+    def remfile_backend(self, tmp_path) -> RemfileBackend:
+        return RemfileBackend(tmp_path, caching=False)
 
     def test_open_hdf5(self, remfile_backend: RemfileBackend) -> None:
         with remfile_backend.open_url(S3_HDF5_URL) as f:

@@ -16,8 +16,14 @@ class Backend(ABC):
     name: str
 
     @abstractmethod
-    def can_handle(self, key: Optional[AnnexKey], mode: str) -> bool:
-        """Return True if this backend should be used for *key* in *mode*."""
+    def can_handle(
+        self, key: Optional[AnnexKey], mode: str, relpath: Optional[str] = None
+    ) -> bool:
+        """Return True if this backend should be used for *key* in *mode*.
+
+        *relpath* is the path within the dataset, for backends that dispatch on
+        the file name when the annex key carries no suffix (URL/VURL keys).
+        """
 
     @abstractmethod
     def open_url(self, url: str, mode: str = "rb", **kwargs: Any) -> IO:

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os.path
+from pathlib import Path, PurePosixPath
+import shutil
 from types import ModuleType, TracebackType
 from typing import IO, Any, Optional, cast
 import urllib.request
@@ -31,18 +34,59 @@ class RemfileBackend(Backend):
     # File extensions this backend handles (HDF5-structured formats)
     EXTENSIONS = frozenset({".nwb", ".h5", ".hdf5", ".hdf", ".he5", ".nc", ".nc4"})
 
-    def __init__(self) -> None:
+    #: Timeout, in seconds, for the size probe in :meth:`open_url`.
+    PROBE_TIMEOUT = 10.0
+
+    def __init__(self, path: str | Path, caching: bool) -> None:
         remfile_mod = _get_remfile()
         if remfile_mod is None:
             raise ImportError("remfile is not installed")
         self._remfile: ModuleType = remfile_mod
+        self._cache_dir = os.path.join(path, ".git", "datalad", "cache", "remfile")
+        # Without a disk cache, --caching=ondisk would silently be a no-op for
+        # exactly the large files it matters most for.
+        self._disk_cache = self._remfile.DiskCache(self._cache_dir) if caching else None
 
-    def can_handle(self, key: Optional[AnnexKey], mode: str) -> bool:
+    def can_handle(
+        self, key: Optional[AnnexKey], mode: str, relpath: Optional[str] = None
+    ) -> bool:
         if mode != "rb":
             return False
-        if key is None or key.suffix is None:
+        suffix = key.suffix if key is not None else None
+        if suffix is None and relpath is not None:
+            # URL/VURL keys (``addurl --fast``/``--relaxed``) carry no suffix,
+            # so fall back to the name the user sees in the tree.
+            suffix = PurePosixPath(relpath).suffix or None
+        if suffix is None:
             return False
-        return key.suffix.lower() in self.EXTENSIONS
+        return suffix.lower() in self.EXTENSIONS
+
+    def _probe_size(self, url: str) -> Optional[int]:
+        """Return the size of *url*, or None if the server did not say.
+
+        ``remfile.File`` determines the size itself, but retries transient
+        failures 8 times with exponential backoff (~25 s).  The adapter tries
+        URLs one after another, and ``DataLadFUSE.open()`` holds the global
+        rwlock while it does, so a single dead URL would stall an entire mount.
+        Probing here instead keeps the fall-through to the next URL/backend as
+        fast as it is for fsspec: one ranged request, one short timeout, no
+        retries.
+        """
+        req = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
+        with urllib.request.urlopen(req, timeout=self.PROBE_TIMEOUT) as resp:
+            # 206: "Content-Range: bytes 0-0/<total>" (<total> may be "*")
+            content_range = resp.headers.get("Content-Range")
+            if content_range is not None:
+                total = content_range.rsplit("/", 1)[-1].strip()
+                if total.isdigit():
+                    return int(total)
+            elif resp.status == 200:
+                # Server ignored the Range header and sent the whole body
+                content_length = resp.headers.get("Content-Length")
+                if content_length is not None and content_length.isdigit():
+                    return int(content_length)
+        lgr.debug("Could not determine size of %s from probe response", url)
+        return None
 
     def open_url(self, url: str, mode: str = "rb", **kwargs: Any) -> IO:  # noqa: U100
         if mode != "rb":
@@ -52,7 +96,14 @@ class RemfileBackend(Backend):
             raise NotImplementedError(
                 f"RemfileBackend only supports mode='rb', got {mode!r}"
             )
-        return cast(IO, RemfileWrapper(self._remfile.File(url), url))
+        size = self._probe_size(url)
+        # `_size` is private API; see the remfile pin in setup.cfg.
+        remfile_obj = self._remfile.File(url, _size=size, disk_cache=self._disk_cache)
+        return cast(IO, RemfileWrapper(remfile_obj, url))
+
+    def clear(self) -> None:
+        if self._disk_cache is not None:
+            shutil.rmtree(self._cache_dir, ignore_errors=True)
 
 
 class RemfileWrapper:
@@ -73,11 +124,22 @@ class RemfileWrapper:
         self._url = url
         self.closed = False
 
-    def read(self, size: int = -1) -> bytes:
+    def read(self, size: Optional[int] = -1) -> bytes:
+        # ``remfile.RemFile.read()`` requires an explicit, non-negative size:
+        # it returns b"" (and rewinds by one) for -1, never clamps at EOF, and
+        # issues an unsatisfiable Range request when reading at EOF.  Clamp
+        # here so the wrapper behaves like a regular file object.
+        remaining = max(self._f.length - self._f.tell(), 0)
+        if size is None or size < 0 or size > remaining:
+            size = remaining
+        if not size:
+            return b""
         return self._f.read(size)  # type: ignore[no-any-return]
 
     def seek(self, offset: int, whence: int = 0) -> int:
-        return self._f.seek(offset, whence)  # type: ignore[no-any-return]
+        # ``remfile.RemFile.seek()`` returns None
+        self._f.seek(offset, whence)
+        return self.tell()
 
     def tell(self) -> int:
         return self._f.tell()  # type: ignore[no-any-return]
@@ -113,7 +175,7 @@ class RemfileWrapper:
         chunks: list[bytes] = []
         total = 0
         while total < self._MAX_LINE_BYTES:
-            chunk = self._f.read(self._ITER_CHUNK)
+            chunk = self.read(self._ITER_CHUNK)
             if not chunk:
                 if chunks:
                     return b"".join(chunks)
@@ -135,16 +197,9 @@ class RemfileWrapper:
     def info(self) -> dict[str, Any]:
         """Minimal info dict matching the fsspec convention.
 
-        Issues a HEAD request to obtain ``Content-Length``.  This is rarely
-        called in practice because HDF5 annex keys almost always carry size
-        information.
+        ``DataLadFUSE.getattr(path, fh)`` reaches this for every ``fstat()`` on
+        an open handle, so it must not hit the network: a HEAD request would
+        fail outright against presigned S3 GET URLs, which reject HEAD.
+        remfile already determined the size when the file was opened.
         """
-        req = urllib.request.Request(self._url, method="HEAD")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            content_length = resp.headers.get("Content-Length")
-        if content_length is None:
-            raise ValueError(
-                f"HEAD response for {self._url} lacks Content-Length; "
-                "cannot determine file size"
-            )
-        return {"type": "file", "size": int(content_length)}
+        return {"type": "file", "size": self._f.length}
