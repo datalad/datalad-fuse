@@ -113,7 +113,7 @@ class FuseFS(Interface):
         allow_other: bool = False,
         caching: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
-        from fuse import FUSE
+        from mfusepy import FUSE
 
         from .fuse_ import DataLadFUSE
 

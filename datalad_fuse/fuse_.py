@@ -18,8 +18,8 @@ from typing import IO, Any, Optional, TypeVar
 
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
-from fuse import FuseOSError, Operations
 import methodtools
+from mfusepy import FuseOSError, Operations
 
 from .consts import CACHE_SIZE
 from .fsspec import FsspecAdapter
@@ -47,6 +47,30 @@ fcntl.restype = c_int
 T = TypeVar("T")
 P = ParamSpec("P")
 
+# FUSE callbacks taking a path within the mount as their first argument
+_PATH_OPS = frozenset(
+    name
+    for name in dir(Operations)
+    if not name.startswith("_") and name != "init_with_config"
+)
+
+
+def _in_root(fs: DataLadFUSE, name: str, method: Callable[..., T]) -> Callable[..., T]:
+    """Map the FUSE path given to ``method`` into the dataset"""
+
+    @wraps(method)
+    def call(path: Optional[str], *args: Any) -> T:
+        lgr.debug("op=%s for path=%s with args %s", name, path, args)
+        if path is None:
+            # libfuse may pass no path for operations on an open handle
+            return method(path, *args)
+        if not fs.mode_transparent and ".git" in Path(path).parts:
+            lgr.debug("Raising ENOENT for .git")
+            raise FuseOSError(ENOENT)
+        return method(fs.root + path, *args)
+
+    return call
+
 
 def write_op(
     f: Callable[Concatenate[DataLadFUSE, str, P], T]
@@ -64,7 +88,7 @@ def write_op(
 
 
 class DataLadFUSE(Operations):  # LoggingMixIn,
-    """fusepy file system exposing a dataset, as used by ``datalad fusefs``
+    """mfusepy file system exposing a dataset, as used by ``datalad fusefs``
 
     Files are read via an :class:`~datalad_fuse.fsspec.FsspecAdapter`, so
     annexed files without local content are read from their remote URLs.
@@ -90,7 +114,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     --------
     Mount a dataset with extra FUSE options::
 
-        from fuse import FUSE
+        from mfusepy import FUSE
         FUSE(DataLadFUSE("/abs/path/to/ds", caching=False), "/mnt/point",
              foreground=True, ro=True)
     """
@@ -115,14 +139,19 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         # multiple times?
         self._counter = DataLadFUSE._counter_offset
 
-    def __call__(self, op: str, path: str, *args: Any) -> Any:
-        lgr.debug("op=%s for path=%s with args %s", op, path, args)
-        # if (".git", "annex", "objects") == Path(path).parts[-7:-4]:
-        #     import pdb; pdb.set_trace()
-        if not self.mode_transparent and ".git" in Path(path).parts:
-            lgr.debug("Raising ENOENT for .git")
-            raise FuseOSError(ENOENT)
-        return super(DataLadFUSE, self).__call__(op, self.root + path, *args)
+    def __getattribute__(self, name: str) -> Any:
+        # mfusepy invokes FUSE callbacks as plain method calls on this object
+        # (fusepy dispatched them via Operations.__call__), so this is the one
+        # place where paths coming from FUSE get mapped into the dataset.
+        # Hence callbacks must not be called on self from within this class.
+        value = super().__getattribute__(name)
+        if (
+            name in _PATH_OPS
+            and callable(value)
+            and not getattr(value, "libfuse_ignore", False)
+        ):
+            return _in_root(self, name, value)
+        return value
 
     def destroy(self, _path: Optional[str] = None) -> int:
         lgr.warning("Destroying fsspecs and collection of %d fhs", len(self._fhdict))
