@@ -68,20 +68,23 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
 
     Files are read via an :class:`~datalad_fuse.fsspec.FsspecAdapter`, so
     annexed files without local content are read from their remote URLs.
-    Unless ``mode_transparent`` is set, annexed files appear as regular files,
-    whose size is taken from their annex key and modification time is the
-    date of the ``HEAD`` commit.  Files cannot be written to.
+    Unless ``mode_transparent`` is set, annexed files appear as regular files.
+    For files without local content, the size is taken from their annex key
+    and the modification time is the date of the ``HEAD`` commit.  Files
+    cannot be written to.
 
     Parameters
     ----------
     root : str
-        Absolute path to the top directory of the dataset to expose.
+        Absolute path, without symbolic links (see `os.path.realpath`), to the
+        top directory of the dataset to expose.
     caching : bool
         Whether to cache remote data on disk; see
         :class:`~datalad_fuse.fsspec.DatasetAdapter`.
     mode_transparent : bool
         Whether to expose the ``.git`` directories of the datasets (hidden by
-        default).
+        default).  Annexed files without local content then appear as
+        symlinks into ``.git/annex/objects/``.
 
     Examples
     --------

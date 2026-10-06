@@ -62,11 +62,12 @@ class DatasetAdapter:
     caching : bool
         If true, keep the data fetched from remote URLs in a sparse on-disk
         cache under ``<path>/.git/datalad/cache/fsspec/``, to be reused by
-        subsequent reads.  If false, data are only buffered in memory while a
-        file is open.
+        subsequent reads (for up to a week).  If false, data are only
+        buffered in memory while a file is open.
     mode_transparent : bool
-        If true, also give access to files under ``.git/``, including the
-        ``.git/annex/objects/...`` key files that annexed symlinks point to.
+        If true, paths of key files under ``.git/annex/objects/`` (the targets
+        of annexed symlinks) are opened as annexed content, fetched from a
+        remote URL if not present locally.
 
     Notes
     -----
@@ -113,7 +114,7 @@ class DatasetAdapter:
     def get_file_state(self, relpath: str) -> tuple[FileState, Optional[AnnexKey]]:
         """Determine whether a file is annexed and has its content present
 
-        Results are cached for the lifetime of the adapter.
+        Results are cached (for the most recently queried files).
 
         Parameters
         ----------
@@ -598,10 +599,8 @@ class FsspecAdapter:
 
     Notes
     -----
-    Paths given to the methods must be located under ``root`` and spelled
-    consistently with it: pass absolute paths if ``root`` is absolute, or
-    paths starting with ``root`` if it is relative.  Paths relative to
-    ``root`` are not supported.
+    Use an absolute ``root``, and absolute paths under it for the methods.
+    Paths relative to ``root`` or to the current directory are not supported.
     """
 
     def __init__(

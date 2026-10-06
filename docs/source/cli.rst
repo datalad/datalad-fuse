@@ -49,13 +49,15 @@ What you see in the mount
 
 - The same directory tree as in the dataset's working tree.
 - Annexed files appear as regular files, whether or not their content is
-  present.  Their size comes from the annex key, and their modification time
-  is the date of the dataset's last commit.  Reading a file whose content is
-  not present fetches the needed parts from a remote URL (see
-  :doc:`concepts`).
+  present.  For a file whose content is not present, the size comes from its
+  annex key and the modification time is the date of the dataset's last
+  commit; reading it fetches the needed parts from a remote URL (see
+  :doc:`concepts`).  A file whose content is present shows the size,
+  permissions and modification time of that content.
 - The ``.git`` directory is hidden (see ``--mode-transparent`` below).
 - Installed subdatasets are included; uninstalled ones are empty directories.
-- Files cannot be written, created or deleted.
+- Files cannot be written, created or deleted (see :ref:`concepts-read-only`
+  for a few exceptions).
 
 Options
 -------
@@ -71,10 +73,10 @@ Options
    ``/etc/fuse.conf``.
 
 ``--mode-transparent``
-   Show the ``.git`` directories.  Annexed files then appear as the symlinks
-   they are in the dataset, and the targets of these symlinks under
-   ``.git/annex/objects/`` can be read, with their content fetched as
-   needed.  Files under ``.git`` can also be written to.
+   Show the ``.git`` directories.  Annexed files whose content is not present
+   then appear as the symlinks they are in the dataset, and the targets of
+   these symlinks under ``.git/annex/objects/`` can be read, with their
+   content fetched as needed.  Files under ``.git`` can also be written to.
 
 .. _cli-cache-clear:
 
@@ -86,6 +88,7 @@ fusefs`` remove on-disk caches when it exits:
 
 ``visited``
    Clear the caches of the (sub)datasets that were accessed in the mount.
+   This only has an effect if the mount used ``--caching ondisk``.
 ``recursive``
    Clear the caches of the mounted dataset and all its installed
    subdatasets.

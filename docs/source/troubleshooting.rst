@@ -83,7 +83,8 @@ Reading a file in the mount fails with an odd error
 When the content of a file cannot be fetched, programs reading it from the
 mount report a generic error such as "Input/output error", or even
 "Numerical result out of range".  Run ``datalad fsspec-head`` on the same file
-to see the actual problem, and check the output of ``datalad fusefs``.
+to see the actual problem, or mount with ``datalad -l debug fusefs ...`` to
+see the URLs that are tried.
 
 "fusefs does not work properly without --foreground"
 ----------------------------------------------------
@@ -133,6 +134,14 @@ killed.  Unmount the stale mount point, then mount again:
 ``--allow-other`` requires the system administrator to add the line
 ``user_allow_other`` to ``/etc/fuse.conf``.
 
+"Invalid argument" for every file in the mount
+----------------------------------------------
+
+If the path of the dataset given to ``datalad fusefs`` contains a symbolic
+link, files whose content is not present cannot be read.  Give the real path
+of the dataset instead, e.g. ``datalad fusefs -d "$(realpath path/to/dataset)"
+...``.
+
 A subdataset's directory is empty
 ---------------------------------
 
@@ -142,15 +151,14 @@ get -n path/to/subdataset``, and remount if you are using a FUSE mount.
 ``ValueError`` "Path not under root dataset" or "is not in the subpath of"
 --------------------------------------------------------------------------
 
-A path passed to `~datalad_fuse.fsspec.FsspecAdapter` was not spelled
-consistently with its ``root``.  Use absolute paths for both (see
-:doc:`python`).
+A path passed to `~datalad_fuse.fsspec.FsspecAdapter` was relative.  Use an
+absolute ``root`` and absolute paths (see :doc:`python`).
 
 Changes to the dataset are not reflected
 ----------------------------------------
 
 The state of each file (annexed or not, content present or not) is
-determined once and remembered for the lifetime of an adapter or a mount.
+remembered by an adapter or a mount once determined.
 After ``datalad get``, ``datalad drop``, ``git checkout`` etc. in the
 dataset, create a new adapter or remount.
 
@@ -169,8 +177,8 @@ Reading is slow
 Warnings "Retrying request to ..."
 ----------------------------------
 
-A request failed due to a network or server problem, and is retried
-automatically.  Occasional retries are harmless.
+A server answered with an error (HTTP 5xx), and the request is retried
+automatically, up to four times.  Occasional retries are harmless.
 
 Warning "Destroying fsspecs and collection of N fhs"
 ----------------------------------------------------
@@ -186,7 +194,8 @@ Known limitations
 - Only ``http(s)://`` URLs are used: no SSH remotes, and no ``s3://`` or other
   special-remote protocols, unless git-annex also records an HTTP(S) URL for
   the content.
-- No authentication, other than credentials included in a URL.
+- No authentication, other than credentials included in a URL, and no use of
+  HTTP proxies.
 - Fetched content is not checksum-verified.
 - Subdatasets are not installed automatically.
 - ``datalad fusefs`` must run in the foreground, and FUSE mounts are only

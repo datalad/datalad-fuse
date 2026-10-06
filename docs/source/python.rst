@@ -59,8 +59,8 @@ supported.
 
 The ``caching`` argument is required: ``True`` keeps fetched data in an
 on-disk cache inside the dataset, ``False`` only buffers them in memory while
-a file is open (see :ref:`caching`).  ``dsa.clear()`` removes the dataset's
-cache.
+a file is open (see :ref:`caching`).  With ``caching=True``, ``dsa.clear()``
+removes the dataset's cache.
 
 The adapter starts ``git annex`` processes to answer its queries;
 ``close()``, called by :func:`contextlib.closing` above, stops them.
@@ -152,10 +152,8 @@ context manager:
            header = f.read(1024)
 
 .. important::
-   Paths passed to an `~datalad_fuse.fsspec.FsspecAdapter` must be located
-   under its ``root`` and spelled the same way.  The simplest is to use
-   absolute paths for both, as above.  Paths relative to ``root`` are not
-   supported.
+   Use an absolute ``root``, and absolute paths under it, as above.  Paths
+   relative to ``root``, or to the current directory, are not supported.
 
 Besides ``open()``, ``get_file_state()`` and ``is_under_annex()``, it offers
 ``get_commit_datetime()`` (the date of the last commit of the dataset
@@ -233,8 +231,8 @@ module, which is the default on macOS and, from Python 3.14 on, on Linux.
 
 To pass other FUSE mount options, mount the file system class
 `~datalad_fuse.fuse_.DataLadFUSE` directly with fusepy; keyword arguments of
-``FUSE()`` become mount options.  ``DataLadFUSE`` needs the *absolute* path
-of the dataset:
+``FUSE()`` become mount options.  ``DataLadFUSE`` needs the absolute path of
+the dataset, without symbolic links, as returned by :func:`os.path.realpath`:
 
 .. code-block:: python
 
@@ -245,7 +243,7 @@ of the dataset:
    from datalad_fuse.fuse_ import DataLadFUSE
 
    FUSE(
-       DataLadFUSE(os.path.abspath("000582"), caching=True),
+       DataLadFUSE(os.path.realpath("000582"), caching=True),
        "mnt",
        foreground=True,
        ro=True,

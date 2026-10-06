@@ -82,9 +82,12 @@ If none of the candidates can be opened, opening the file fails with
 To see which URLs are tried, enable debug logging (see
 :ref:`troubleshooting-logging`).
 
-Requests that fail with connection errors or server errors (HTTP 5xx) are
-retried a few times with increasing delays (each retry logs a warning
-"Retrying request to ...").
+Requests answered with a server error (HTTP 5xx) are retried up to four
+times, waiting up to 36 seconds in between, and each retry logs a warning
+"Retrying request to ...".  A server that keeps failing can thus delay
+opening a file by a couple of minutes before the next URL is tried.
+Connection errors are not retried: the next candidate URL is tried right
+away.
 
 
 Access is anonymous
@@ -96,6 +99,10 @@ remotes).  DataLad's credential store, ``~/.netrc`` or AWS credentials are not
 consulted, so content that requires authentication (for example embargoed
 DANDI data or private repositories) cannot be read this way; use ``datalad
 get`` for it.
+
+HTTP proxies configured with the ``http_proxy``/``https_proxy`` environment
+variables are not used either, so where the internet can only be reached
+through a proxy, remote content cannot be read.
 
 Content is not verified
 -----------------------
@@ -117,8 +124,8 @@ NWB/HDF5 file transfers only a small fraction of it.
 
 This works best for file formats designed for partial access, such as HDF5
 and NWB, and with tools that only read the parts they need.  Reading a whole file, e.g. to decompress a ``.nii.gz`` file or compute
-a checksum, transfers all of it, and over many small requests; if you need
-entire files, ``datalad get`` is usually faster.
+a checksum, transfers all of it, one 5 MiB request after the other; if you
+need entire files, ``datalad get`` is usually faster.
 
 The first access to a remote file takes a little time, as git-annex has to be
 queried and a connection established; subsequent reads of the same open file
@@ -136,14 +143,15 @@ ondisk`` for ``datalad fusefs`` and ``datalad fsspec-head``), fsspec's
 `CachingFileSystem
 <https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.implementations.cached.CachingFileSystem>`_
 stores the fetched blocks on disk and reuses them when the same file is read
-again, including in later sessions.
+again, also in later sessions, for up to a week; after that, fsspec considers
+them expired and fetches the data again.
 
 - The cache of a dataset is located at ``.git/datalad/cache/fsspec/`` inside
   that dataset, so each (sub)dataset has its own.
 - Files are cached *sparsely*: only the blocks that were read are stored.
 - The cache is separate from the git-annex object store: cached files do not
   count as present content for ``git annex`` or ``datalad``.
-- The cache is never cleaned up automatically while in use.  Remove it with
+- The cache does not shrink by itself.  Remove it with
   ``datalad fsspec-cache-clear`` (add ``-r`` to include subdatasets), or have
   ``datalad fusefs`` remove it on exit by setting the
   ``datalad.fusefs.cache-clear`` configuration option (see
@@ -166,6 +174,8 @@ first, without getting any content, for example:
    $ datalad get -n -d . path/to/subdataset
 
 
+.. _concepts-read-only:
+
 Read-only access
 ================
 
@@ -176,5 +186,6 @@ commands in the dataset itself (not in the mount) to make changes.
 
 .. note::
    A few operations are currently passed through the mount to the dataset's
-   working tree: creating and removing directories, and changing permissions,
-   ownership and timestamps.  Avoid them in the mount.
+   working tree: creating and removing directories, creating special files
+   (such as FIFOs), and changing permissions, ownership and timestamps.  Avoid
+   them in the mount.

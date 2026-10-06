@@ -248,7 +248,8 @@ Keep fetched data in a cache
 
 By default, fetched data are kept in memory only while a file is open, so
 opening the file again fetches the data again.  With caching enabled, they
-are stored in a cache on disk and reused, also across sessions:
+are stored in a cache on disk and reused, also across sessions (for up to a
+week):
 
 .. code-block:: python
 
