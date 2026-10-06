@@ -1,77 +1,68 @@
 # DataLad FUSE extension package
 
-[![codecov.io](https://codecov.io/github/datalad/datalad-fuse/coverage.svg?branch=master)](https://codecov.io/github/datalad/datalad-fuse?branch=master) [![tests](https://github.com/datalad/datalad-fuse/workflows/Test/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3ATest) [![docs](https://github.com/datalad/datalad-fuse/workflows/docs/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3Adocs)
+[![codecov.io](https://codecov.io/github/datalad/datalad-fuse/coverage.svg?branch=master)](https://codecov.io/github/datalad/datalad-fuse?branch=master) [![tests](https://github.com/datalad/datalad-fuse/workflows/Test/badge.svg)](https://github.com/datalad/datalad-fuse/actions?query=workflow%3ATest) [![docs](https://readthedocs.org/projects/datalad-fuse/badge/?version=latest)](https://datalad-fuse.readthedocs.io/en/latest/)
 
-`datalad-fuse` provides commands for reading files in a
-[DataLad](http://datalad.org) dataset from their remote web URLs without having
-to download them in their entirety first.  Instead,
-[fsspec](http://github.com/fsspec/filesystem_spec) is used to sparsely download
-and locally cache the files as needed.
+`datalad-fuse` lets you read files of [DataLad](https://www.datalad.org)
+datasets and [git-annex](https://git-annex.branchable.com) repositories
+without downloading them first: only the parts of files that are actually
+read are fetched, via [fsspec](https://filesystem-spec.readthedocs.io), from
+the URLs that git-annex knows.  Unlike `datalad get`, which downloads whole
+files before you can use them, this pays off when you need only parts of
+large files, e.g. a few arrays from NWB/HDF5 files or the headers of many
+images.  Use it through a FUSE mount, so that any program can open the files,
+or directly from Python.
+
+**Documentation: https://datalad-fuse.readthedocs.io**
 
 ## Installation
 
-Current version of `datalad-fuse` requires Python 3.7 or higher.  Just use
-[pip](https://pip.pypa.io) for Python 3 (You have pip, right?) to install it:
-
     python3 -m pip install datalad-fuse
 
-In addition, use of the `datalad fusefs` command requires FUSE to be installed;
-on Debian-based systems, this can be done with:
+[git-annex](https://git-annex.branchable.com/install/) is required, and FUSE
+for mounting datasets (e.g. `sudo apt-get install fuse3 libfuse2t64` on
+Ubuntu 24.04).  See the
+[installation instructions](https://datalad-fuse.readthedocs.io/en/latest/installation.html)
+for details.
 
-    sudo apt-get install fuse
+## Example
 
-## Commands
+Clone a dataset, here [Dandiset 000582](https://dandiarchive.org/dandiset/000582)
+from the DANDI Archive.  This gets all file names, but none of the 1.86 GB of
+file content:
 
-### `datalad fsspec-cache-clear [<options>]`
+    datalad clone https://github.com/dandisets/000582
 
-Clears the local download cache for a dataset.
+On the command line, mount the dataset; `datalad fusefs` keeps running until
+the dataset is unmounted:
 
-#### Options
+    mkdir mnt
+    datalad fusefs -d 000582 --foreground mnt
 
-- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
-  If no dataset is given, an attempt is made to identify the dataset based on
-  the current working directory.
+Then, in another terminal, use any tool on its files (here `h5ls` from the
+HDF5 tools), and unmount when done:
 
-- `-r`, `--recursive` — Clear the caches of subdatasets as well.
+    h5ls mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb
+    fusermount -u mnt
 
-### `datalad fsspec-head [<options>] <path>`
+In Python, open files directly, without FUSE:
 
-Shows leading lines/bytes of an annexed file by fetching its data from a remote
-URL.
+```python
+from contextlib import closing
 
-#### Options
+import h5py
+import pynwb
 
-- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
-  If no dataset is given, an attempt is made to identify the dataset based on
-  the current working directory.
+from datalad_fuse.fsspec import DatasetAdapter
 
-- `-n <INT>`, `--lines <INT>` — How many lines to show (default: 10)
+# caching=False: keep fetched data in memory only
+with closing(DatasetAdapter("000582", caching=False)) as dsa:
+    with dsa.open("sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb") as f:
+        with h5py.File(f, "r") as h5, pynwb.NWBHDF5IO(file=h5) as io:
+            print(io.read().units.to_dataframe())
+```
 
-- `-c <INT>`, `--bytes <INT>` — How many bytes to show
-
-### `datalad fusefs [<options>] <mount-path>`
-
-Create a read-only FUSE mount at `<mount-path>` that exposes the files in the
-given dataset.  Opening a file under the mount that is not locally present in
-the dataset will cause its contents to be downloaded from the file's web URL as
-needed.
-
-When the command finishes, `fsspec-cache-clear` may be run depending on the
-value of the `datalad.fusefs.cache-clear` configuration option.  If it is set
-to "`visited`", then any (sub)datasets that were accessed in the FUSE mount
-will have their caches cleared; if it is instead set to "`recursive`", then all
-(sub)datasets in the dataset being operated on will have their caches cleared.
-
-#### Options
-
-- `--allow-other` — Allow all users to access files in the mount.  This
-  requires setting `user_allow_other` in `/etc/fuse.conf`.
-
-- `-d <DATASET>`, `--dataset <DATASET>` — Specify the dataset to operate on.
-  If no dataset is given, an attempt is made to identify the dataset based on
-  the current working directory.
-
-- `-f`, `--foreground` — Run the FUSE process in the foreground; use Ctrl-C to
-  exit.  This option is currently required.
-
-- `--mode-transparent` — Expose the dataset's `.git` directory in the mount
+The [tutorial](https://datalad-fuse.readthedocs.io/en/latest/tutorial.html)
+continues this example, and the documentation covers the
+[command line](https://datalad-fuse.readthedocs.io/en/latest/cli.html) and
+[Python](https://datalad-fuse.readthedocs.io/en/latest/python.html)
+interfaces in detail.

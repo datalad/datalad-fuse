@@ -64,6 +64,37 @@ def write_op(
 
 
 class DataLadFUSE(Operations):  # LoggingMixIn,
+    """fusepy file system exposing a dataset, as used by ``datalad fusefs``
+
+    Files are read via an :class:`~datalad_fuse.fsspec.FsspecAdapter`, so
+    annexed files without local content are read from their remote URLs.
+    Unless ``mode_transparent`` is set, annexed files appear as regular files.
+    For files without local content, the size is taken from their annex key
+    and the modification time is the date of the ``HEAD`` commit.  Files
+    cannot be written to.
+
+    Parameters
+    ----------
+    root : str
+        Absolute path, without symbolic links (see `os.path.realpath`), to the
+        top directory of the dataset to expose.
+    caching : bool
+        Whether to cache remote data on disk; see
+        :class:`~datalad_fuse.fsspec.DatasetAdapter`.
+    mode_transparent : bool
+        Whether to expose the ``.git`` directories of the datasets (hidden by
+        default).  Annexed files without local content then appear as
+        symlinks into ``.git/annex/objects/``.
+
+    Examples
+    --------
+    Mount a dataset with extra FUSE options::
+
+        from fuse import FUSE
+        FUSE(DataLadFUSE("/abs/path/to/ds", caching=False), "/mnt/point",
+             foreground=True, ro=True)
+    """
+
     # ??? TODO: since we would mix normal os.open
     # and not, we will mint our "fds" over this offset
 

@@ -1,5 +1,22 @@
 # Contributing to DataLad FUSE
 
+## Documentation
+
+The documentation at https://datalad-fuse.readthedocs.io is built with
+[Sphinx](https://www.sphinx-doc.org) from `docs/source/`; the API reference
+is generated from the docstrings, and the command line reference from the
+commands' parameter definitions.  To build it locally:
+
+```bash
+pip install -e . -r docs/requirements.txt
+make -C docs html
+# then open docs/build/html/index.html
+```
+
+Warnings are treated as errors.  The documentation is also built for every
+pull request, both by the `docs` GitHub workflow and by Read the Docs, which
+links a preview of the rendered documentation from the pull request's checks.
+
 ## Running Tests
 
 ### Basic tests
