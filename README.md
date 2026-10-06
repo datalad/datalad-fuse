@@ -19,8 +19,8 @@ or directly from Python.
     python3 -m pip install datalad-fuse
 
 [git-annex](https://git-annex.branchable.com/install/) is required, and FUSE
-for mounting datasets (e.g. `sudo apt-get install fuse3 libfuse2t64` on
-Ubuntu 24.04).  See the
+(libfuse 2 or 3) for mounting datasets (e.g. `sudo apt-get install fuse3` on
+Debian/Ubuntu).  See the
 [installation instructions](https://datalad-fuse.readthedocs.io/en/latest/installation.html)
 for details.
 
