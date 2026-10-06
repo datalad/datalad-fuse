@@ -13,9 +13,11 @@ web server.  ``datalad get`` downloads such files in full before you can open
 them.
 
 ``datalad-fuse`` lets you open them right away instead.  It looks up the URLs
-that git-annex has recorded for a file and, using
-`fsspec <https://filesystem-spec.readthedocs.io>`_, fetches only the parts of
-the file that are actually read.
+that git-annex has recorded for a file and fetches only the parts of the file
+that are actually read, with
+`fsspec <https://filesystem-spec.readthedocs.io>`_ or, for NWB/HDF5 files and
+if installed, `remfile <https://github.com/flatironinstitute/remfile>`_ (see
+:ref:`concepts-backends`).
 
 Is it a good fit?
 =================
@@ -44,8 +46,8 @@ There are two ways to use it:
    * - What
      - ``datalad fusefs`` presents a dataset as a read-only directory tree in
        which annexed files can be opened like local files.
-     - ``FsspecAdapter`` and ``DatasetAdapter`` return Python file objects
-       for files of a dataset.
+     - ``DatasetAdapter`` and ``RemoteFilesystemAdapter`` return Python file
+       objects for files of a dataset.
    * - Works with
      - Any program: ``h5ls``, MATLAB, ``nwbinspector``, shell tools, ...
      - Python libraries that accept file objects: h5py, pynwb, pandas,
@@ -102,7 +104,7 @@ Or open files directly from Python:
    import h5py
    import pynwb
 
-   from datalad_fuse.fsspec import DatasetAdapter
+   from datalad_fuse.adapter import DatasetAdapter
 
    # caching=False: keep fetched data in memory only (see "Caching")
    with closing(DatasetAdapter("000582", caching=False)) as dsa:

@@ -11,7 +11,7 @@ from datalad.interface.results import get_status_dict
 from datalad.support.constraints import EnsureNone
 from datalad.support.param import Parameter
 
-from .fsspec import DatasetAdapter
+from .adapter import DatasetAdapter
 
 
 @build_doc

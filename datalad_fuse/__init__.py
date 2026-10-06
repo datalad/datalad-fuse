@@ -14,7 +14,7 @@ from datalad.distribution.dataset import (
 )
 from datalad.interface.base import Interface, build_doc, eval_results
 from datalad.interface.results import get_status_dict
-from datalad.support.constraints import EnsureNone
+from datalad.support.constraints import EnsureNone, EnsureStr
 from datalad.support.param import Parameter
 
 from ._version import get_versions
@@ -94,7 +94,17 @@ class FuseFS(Interface):
             args=("--caching",),
             choices=["none", "ondisk"],
             default="none",
-            doc="Whether to cache fsspec'ed files on disk on not at all",
+            doc="Whether to cache data fetched from remote URLs on disk or not at all",
+        ),
+        "backends": Parameter(
+            args=("--backends",),
+            doc=(
+                "Comma-separated list of backends to try for remote file"
+                " access, in priority order.  Available: remfile, fsspec."
+                "  Default: remfile,fsspec (remfile for HDF5 files,"
+                " fsspec for everything else)"
+            ),
+            constraints=EnsureStr() | EnsureNone(),
         ),
         # TODO: (might better become config vars?)
         # --cache=persist
@@ -112,6 +122,7 @@ class FuseFS(Interface):
         mode_transparent: bool = False,
         allow_other: bool = False,
         caching: str | None = None,
+        backends: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
         from fuse import FUSE
 
@@ -133,6 +144,7 @@ class FuseFS(Interface):
                 ds.path,
                 mode_transparent=mode_transparent,
                 caching=caching == "ondisk",
+                backends=backends,
             ),
             mount_path,
             foreground=foreground,

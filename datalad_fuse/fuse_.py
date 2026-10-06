@@ -21,8 +21,8 @@ from datalad.distribution.dataset import Dataset
 from fuse import FuseOSError, Operations
 import methodtools
 
+from .adapter import RemoteFilesystemAdapter
 from .consts import CACHE_SIZE
-from .fsspec import FsspecAdapter
 
 # Make it relatively small since we are aiming for metadata records ATM
 # Seems of no real good positive net ATM
@@ -66,8 +66,9 @@ def write_op(
 class DataLadFUSE(Operations):  # LoggingMixIn,
     """fusepy file system exposing a dataset, as used by ``datalad fusefs``
 
-    Files are read via an :class:`~datalad_fuse.fsspec.FsspecAdapter`, so
-    annexed files without local content are read from their remote URLs.
+    Files are read via a
+    :class:`~datalad_fuse.adapter.RemoteFilesystemAdapter`, so annexed files
+    without local content are read from their remote URLs.
     Unless ``mode_transparent`` is set, annexed files appear as regular files.
     For files without local content, the size is taken from their annex key
     and the modification time is the date of the ``HEAD`` commit.  Files
@@ -80,11 +81,14 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         top directory of the dataset to expose.
     caching : bool
         Whether to cache remote data on disk; see
-        :class:`~datalad_fuse.fsspec.DatasetAdapter`.
+        :class:`~datalad_fuse.adapter.DatasetAdapter`.
     mode_transparent : bool
         Whether to expose the ``.git`` directories of the datasets (hidden by
         default).  Annexed files without local content then appear as
         symlinks into ``.git/annex/objects/``.
+    backends : str, optional
+        Comma-separated, priority-ordered backends to read remote files with;
+        see :class:`~datalad_fuse.adapter.DatasetAdapter`.
 
     Examples
     --------
@@ -101,13 +105,20 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
     _counter_offset = 1000
 
     def __init__(
-        self, root: str, caching: bool, mode_transparent: bool = False
+        self,
+        root: str,
+        caching: bool,
+        mode_transparent: bool = False,
+        backends: Optional[str] = None,
     ) -> None:
         self.root = op.realpath(root)
         self.mode_transparent = mode_transparent
         self.rwlock = Lock()
-        self._adapter = FsspecAdapter(
-            root, mode_transparent=mode_transparent, caching=caching
+        self._adapter = RemoteFilesystemAdapter(
+            root,
+            mode_transparent=mode_transparent,
+            caching=caching,
+            backends=backends,
         )
         self._fhdict: dict[int, Optional[IO[bytes]]] = {}
         # fh to fsspec_file, already opened (we are RO for now, so can just open
