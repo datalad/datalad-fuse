@@ -27,7 +27,9 @@ tox -e py3
 
 ### FUSE mount tests
 
-Requires FUSE system libraries (`apt-get install fuse` on Debian/Ubuntu):
+Requires FUSE system libraries (`apt-get install fuse3` on Debian/Ubuntu).
+If libfuse 2 is installed as well, it is used unless `FUSE_LIBRARY_NAME=fuse3`
+is set:
 
 ```bash
 tox -e py3 -- --libfuse

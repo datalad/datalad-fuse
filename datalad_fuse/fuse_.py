@@ -361,7 +361,7 @@ class DataLadFUSE(Operations):  # LoggingMixIn,
         lgr.debug("readlink(path=%r)", path)
         return os.readlink(path)
 
-    # ??? seek seems to be not implemented by fusepy/ Operations
+    # ??? seek seems to be not implemented by mfusepy/ Operations
 
     #
     # Benign writeable operations which we can allow

@@ -230,7 +230,7 @@ where :mod:`multiprocessing` starts new processes by re-importing the main
 module, which is the default on macOS and, from Python 3.14 on, on Linux.
 
 To pass other FUSE mount options, mount the file system class
-`~datalad_fuse.fuse_.DataLadFUSE` directly with fusepy; keyword arguments of
+`~datalad_fuse.fuse_.DataLadFUSE` directly with mfusepy; keyword arguments of
 ``FUSE()`` become mount options.  ``DataLadFUSE`` needs the absolute path of
 the dataset, without symbolic links, as returned by :func:`os.path.realpath`:
 
@@ -238,7 +238,7 @@ the dataset, without symbolic links, as returned by :func:`os.path.realpath`:
 
    import os
 
-   from fuse import FUSE
+   from mfusepy import FUSE
 
    from datalad_fuse.fuse_ import DataLadFUSE
 
