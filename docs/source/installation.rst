@@ -15,9 +15,9 @@ Requirements
 - **FUSE**, only for mounting datasets with ``datalad fusefs``.  The
   `fusepy <https://github.com/fusepy/fusepy>`_ bindings used by
   ``datalad-fuse`` need the FUSE 2 library (``libfuse.so.2``), plus the
-  ``fusermount`` helper, which FUSE 3 also provides.  Recent Debian and
-  Ubuntu releases come with FUSE 3 only; add the FUSE 2 library to it, keeping
-  FUSE 3 installed:
+  ``fusermount`` helper, which FUSE 3 also provides.  On recent Debian and
+  Ubuntu releases, add the FUSE 2 library to FUSE 3 (installing the ``fuse``
+  package there would remove ``fuse3`` and packages depending on it):
 
   - Debian 13 (trixie), Ubuntu 24.04 and newer::
 
@@ -30,9 +30,6 @@ Requirements
   - older releases::
 
         sudo apt-get install fuse
-
-  On these releases, installing the ``fuse`` package instead would remove
-  ``fuse3``, and with it possibly other packages that depend on it.
 
   FUSE mounts are developed and tested on Linux.  Opening files from Python
   (see :doc:`python`) and ``datalad fsspec-head`` do not need FUSE at all.
@@ -49,8 +46,8 @@ along with it:
 
    $ python3 -m pip install datalad-fuse
 
-To install the development version, which may include features that are not
-released yet:
+This documentation describes the development version, which may include
+features that are not released yet.  To install it:
 
 .. code-block:: console
 
@@ -60,20 +57,12 @@ released yet:
 Checking the installation
 =========================
 
-``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  Check
-that DataLad finds them and that git-annex is available:
+``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  These
+commands should print their help, and the version of git-annex and of
+``datalad-fuse``:
 
 .. code-block:: console
 
    $ datalad fusefs --help
-   Usage: datalad fusefs [-h] [-d DATASET] [-f] [--mode-transparent]
-   ...
    $ git annex version
-   git-annex version: 10.20260901
-   ...
-
-and that the Python package can be imported:
-
-.. code-block:: console
-
    $ python3 -c "import datalad_fuse; print(datalad_fuse.__version__)"

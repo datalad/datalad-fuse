@@ -41,10 +41,9 @@ dataset's top directory:
 .. important::
    Many libraries (h5py, PyNWB, zarr, ...) read data *lazily*, only when you
    access them.  The file object must stay open until all data you need have
-   been read, so do the reading inside the ``with`` blocks, or keep the
-   objects open while working interactively (see the :doc:`tutorial`).
-   Reading after the file was closed fails, with h5py with an error
-   mentioning "identifier is not of specified type".
+   been read, so do the reading inside the ``with`` blocks.  Reading after the
+   file was closed fails, with h5py with an error mentioning "identifier is
+   not of specified type".
 
 ``open()`` returns a seekable, read-only file object:
 
@@ -64,6 +63,33 @@ removes the dataset's cache.
 
 The adapter starts ``git annex`` processes to answer its queries;
 ``close()``, called by :func:`contextlib.closing` above, stops them.
+
+.. _python-interactive:
+
+Working interactively
+---------------------
+
+When exploring data interactively, e.g. in Jupyter, ``with`` blocks are
+impractical.  Open everything step by step instead, and close it in reverse
+order when you are done:
+
+.. code-block:: python
+
+   import h5py
+   import pynwb
+
+   dsa = DatasetAdapter("000582", caching=True)
+   f = dsa.open(nwb_path)
+   h5 = h5py.File(f, "r")
+   io = pynwb.NWBHDF5IO(file=h5)
+   nwbfile = io.read()
+
+   # ... explore nwbfile in further cells ...
+
+   io.close()
+   h5.close()
+   f.close()
+   dsa.close()
 
 Passing file objects to other libraries
 ---------------------------------------
@@ -114,19 +140,12 @@ which prints the URLs that will be tried, in order:
 
    FileState.NO_CONTENT
    15657857 SHA256E
-   https://api.dandiarchive.org/api/assets/2b9e441b-56bc-4be2-893e-0e02d22d239d/download/
-   https://dandiarchive.s3.amazonaws.com/blobs/26a/22c/26a22c31-09bc-43a4-9187-edc7394ed12c?versionId=__7hm7itizkF8RCsvO.Fidzi7Lqd1OMu
+   https://api.dandiarchive.org/api/assets/2b9e441b-.../download/
+   https://dandiarchive.s3.amazonaws.com/blobs/26a/22c/26a22c31-...?versionId=...
 
 The possible states are described in :doc:`concepts`.
-`~datalad_fuse.utils.AnnexKey` can also parse and format keys on its own:
-
-.. code-block:: python
-
-   from datalad_fuse.utils import AnnexKey
-
-   key = AnnexKey.parse("SHA256E-s15657857--43b3b435b953d22e276acc494af2926b63deaf15d2834531b2a87d08a8458a09.nwb")
-   print(key.backend, key.size, key.suffix)  # SHA256E 15657857 .nwb
-   print(str(key))  # the key again
+`~datalad_fuse.utils.AnnexKey` can also parse and format keys on its own (see
+:doc:`api`).
 
 
 Datasets with subdatasets
@@ -189,45 +208,26 @@ Mounting from Python
 ====================
 
 ``datalad.api.fusefs`` (or ``Dataset.fusefs``) mounts a dataset, and does not
-return until it is unmounted.  To work with the mount from the same Python
-program, run it in a separate process:
+return until it is unmounted.  To work with a mount from a Python program,
+run ``datalad fusefs`` as a separate process instead:
 
 .. code-block:: python
 
-   from multiprocessing import Process
    import os
    import subprocess
    import time
 
-   from datalad.api import fusefs
-
-
-   def main():
-       os.makedirs("mnt", exist_ok=True)
-       mount = Process(
-           target=fusefs,
-           args=("mnt",),
-           kwargs={"dataset": "000582", "foreground": True, "caching": "ondisk"},
-       )
-       mount.start()
-       while mount.is_alive() and not os.path.ismount("mnt"):
-           time.sleep(0.1)
-       try:
-           # any code or tool can now open files under mnt/
-           path = "mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb"
-           with open(path, "rb") as f:
-               print(f.read(8))
-       finally:
-           subprocess.run(["fusermount", "-u", "mnt"], check=True)
-           mount.join()
-
-
-   if __name__ == "__main__":  # required by multiprocessing
-       main()
-
-Put this code in a script: the ``if __name__ == "__main__"`` guard is required
-where :mod:`multiprocessing` starts new processes by re-importing the main
-module, which is the default on macOS and, from Python 3.14 on, on Linux.
+   os.makedirs("mnt", exist_ok=True)
+   mount = subprocess.Popen(["datalad", "fusefs", "-d", "000582", "--foreground", "mnt"])
+   while mount.poll() is None and not os.path.ismount("mnt"):
+       time.sleep(0.1)  # wait until the mount is ready
+   try:
+       # any code or tool can now open files under mnt/
+       with open(os.path.join("mnt", nwb_path), "rb") as f:
+           print(f.read(8))
+   finally:
+       subprocess.run(["fusermount", "-u", "mnt"], check=True)
+       mount.wait()
 
 To pass other FUSE mount options, mount the file system class
 `~datalad_fuse.fuse_.DataLadFUSE` directly with fusepy; keyword arguments of
