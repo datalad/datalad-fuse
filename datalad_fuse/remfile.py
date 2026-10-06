@@ -125,6 +125,7 @@ class RemfileWrapper:
         self.closed = False
 
     def read(self, size: Optional[int] = -1) -> bytes:
+        """Read up to *size* bytes, or to the end of the file by default"""
         # ``remfile.RemFile.read()`` requires an explicit, non-negative size:
         # it returns b"" (and rewinds by one) for -1, never clamps at EOF, and
         # issues an unsatisfiable Range request when reading at EOF.  Clamp
@@ -137,14 +138,17 @@ class RemfileWrapper:
         return self._f.read(size)  # type: ignore[no-any-return]
 
     def seek(self, offset: int, whence: int = 0) -> int:
+        """Set the read position, and return it"""
         # ``remfile.RemFile.seek()`` returns None
         self._f.seek(offset, whence)
         return self.tell()
 
     def tell(self) -> int:
+        """Return the current read position"""
         return self._f.tell()  # type: ignore[no-any-return]
 
     def close(self) -> None:
+        """Close the file"""
         self._f.close()
         self.closed = True
 

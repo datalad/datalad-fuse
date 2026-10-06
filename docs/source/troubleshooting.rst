@@ -6,14 +6,15 @@ Troubleshooting
 Seeing what happens
 ===================
 
-Debug logging shows which files are opened, their state, and every URL that
-is tried:
+Debug logging shows which files are opened, their state, which backend takes
+them and every URL that is tried:
 
 .. code-block:: console
 
    $ datalad -l debug fsspec-head -d ds -c 8 path/to/file
    [DEBUG] path/to/file: under annex, does not have content
-   [DEBUG] path/to/file: Attempting to open via URL https://...
+   [DEBUG] path/to/file: opening via backend remfile
+   [DEBUG] path/to/file: trying URL https://... (backend=remfile)
    ...
 
 ``datalad -l debug fusefs ...`` works the same way, but logs every file
@@ -36,11 +37,11 @@ reading from a FUSE mount often only report a generic error.
 Common problems
 ===============
 
-"Could not find a usable URL for <path> within <dataset>"
----------------------------------------------------------
+"Could not open <path> within <dataset> (backends=...)"
+-------------------------------------------------------
 
-The content of the file is not present locally, and none of the candidate
-URLs (see :doc:`concepts`) could be opened.  Check what git-annex knows about
+The content of the file is not present locally, and no backend could open any
+of the candidate URLs (see :doc:`concepts`).  Check what git-annex knows about
 the file:
 
 .. code-block:: console
@@ -53,6 +54,13 @@ the file:
 - If URLs are listed, try one of them with e.g. ``curl -I <URL>``: the server
   may be down, or require authentication, which ``datalad-fuse`` does not
   support.
+- If ``backends=`` in the message lists only backends that do not handle this
+  kind of file — ``backends=remfile`` for anything that is not HDF5-structured
+  — no backend was even tried.  Add ``fsspec`` to the list (see
+  :ref:`concepts-backends`).
+
+  Up to 0.6.0 this message read ``Could not find a usable URL for <path>
+  within <dataset>``.
 
 Errors mentioning "identifier is not of specified type"
 -------------------------------------------------------
@@ -66,7 +74,7 @@ while the file is open, inside the ``with`` blocks (see :doc:`python`).
 ``AttributeError: 'NoneType' object has no attribute 'get_commit_date'``
 ------------------------------------------------------------------------
 
-The path given to `~datalad_fuse.fsspec.DatasetAdapter` is not a dataset (or
+The path given to `~datalad_fuse.adapter.DatasetAdapter` is not a dataset (or
 git repository).  Check the path, and the current directory if the path is
 relative.
 
@@ -151,7 +159,7 @@ get -n path/to/subdataset``, and remount if you are using a FUSE mount.
 ``ValueError`` "Path not under root dataset" or "is not in the subpath of"
 --------------------------------------------------------------------------
 
-A path passed to `~datalad_fuse.fsspec.FsspecAdapter` was relative.  Use an
+A path passed to `~datalad_fuse.adapter.RemoteFilesystemAdapter` was relative.  Use an
 absolute ``root`` and absolute paths (see :doc:`python`).
 
 Changes to the dataset are not reflected
@@ -162,13 +170,45 @@ remembered by an adapter or a mount once determined.
 After ``datalad get``, ``datalad drop``, ``git checkout`` etc. in the
 dataset, create a new adapter or remount.
 
+Warning "Backend 'remfile' requested but not available"
+-------------------------------------------------------
+
+A backend named in ``--backends`` or in ``datalad.fusefs.backends`` is not
+installed, so it is skipped and the remaining ones are used.  Install it (see
+:ref:`installation-backends`) or drop it from the list.  When the default
+``remfile,fsspec`` is in effect and remfile is missing, nothing is said: that
+is the normal case, and fsspec handles everything.
+
+``ValueError`` "No usable backends from spec ..."
+--------------------------------------------------
+
+None of the requested backends could be created: either every name is an
+uninstalled backend, or the list is empty.  ``ValueError: Unknown backend:
+'...'`` instead means a name that does not exist; the names are ``remfile``
+and ``fsspec``.
+
+A file is read by the wrong backend
+-----------------------------------
+
+Which backend takes a file is decided from the extension of its annex key,
+falling back to the extension of its path (see :ref:`concepts-backends`).  Run
+``datalad -l debug fsspec-head ...`` to see the decision; the ``cannot handle
+(suffix=..., mode=...)`` lines show what each backend was offered.  Force a
+single backend with ``--backends fsspec`` or ``--backends remfile``, for
+example to check whether a problem is specific to one of them.
+
 Reading is slow
 ---------------
 
 - The first access to a remote file takes a moment, to query git-annex and to
   connect to the server.
-- Data are fetched in blocks of 5 MiB, so reading many small, scattered
-  pieces of a file is slow.
+- Data are fetched in blocks of 5 MiB (fsspec) or chunks of 100 KiB
+  (remfile), so reading many small, scattered pieces of a file is slow.  For
+  NWB/HDF5 files, installing remfile (see :ref:`installation-backends`)
+  usually helps.
+- Unreachable URLs delay the fall-through to the next one.  ``git annex
+  whereis`` shows which URLs are recorded; ``datalad -l debug`` shows which
+  one is slow.
 - Reading entire files, or decompressing them, fetches everything, and is
   faster with ``datalad get``.
 - Use ``--caching ondisk`` (``caching=True`` in Python) if the same files are

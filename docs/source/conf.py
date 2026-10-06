@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 import datalad_fuse
-import datalad_fuse.fsspec
+import datalad_fuse.adapter
 
 docs_source = dirname(abspath(__file__))
 repo_root = dirname(dirname(docs_source))
@@ -37,7 +37,10 @@ if exists(setup_py):
 # Methods decorated with methodtools.lru_cache are hidden behind a descriptor
 # that autodoc does not recognize as a method.  For the documentation only,
 # replace them with the functions they wrap, so that they are documented.
-for _cls in (datalad_fuse.fsspec.DatasetAdapter, datalad_fuse.fsspec.FsspecAdapter):
+for _cls in (
+    datalad_fuse.adapter.DatasetAdapter,
+    datalad_fuse.adapter.RemoteFilesystemAdapter,
+):
     for _name, _attr in list(vars(_cls).items()):
         if type(_attr).__module__.startswith("wirerope") and hasattr(
             _attr, "__wrapped__"

@@ -5,11 +5,20 @@ From Python, files of a dataset can be opened without any FUSE mount, as
 file objects that many libraries accept in place of a file name.  This page
 covers:
 
-- `~datalad_fuse.fsspec.DatasetAdapter`: open files of a single dataset;
-- `~datalad_fuse.fsspec.FsspecAdapter`: open files across a dataset and its
-  subdatasets;
+- `~datalad_fuse.adapter.DatasetAdapter`: open files of a single dataset;
+- `~datalad_fuse.adapter.RemoteFilesystemAdapter`: open files across a dataset
+  and its subdatasets;
 - the ``datalad`` commands of ``datalad-fuse``, called from Python;
 - mounting a dataset with FUSE from Python.
+
+.. note::
+   Up to 0.6.0, the adapters lived in ``datalad_fuse.fsspec``, and
+   `~datalad_fuse.adapter.RemoteFilesystemAdapter` was called
+   ``FsspecAdapter``.  Both old names still work, with a
+   :exc:`DeprecationWarning`::
+
+       from datalad_fuse.fsspec import FsspecAdapter  # deprecated
+       from datalad_fuse.adapter import RemoteFilesystemAdapter  # use this
 
 The examples use the dandiset cloned in the :doc:`tutorial`, and are run from
 the directory containing it:
@@ -22,7 +31,7 @@ the directory containing it:
 Opening files of a dataset
 ==========================
 
-`~datalad_fuse.fsspec.DatasetAdapter` takes the path to a dataset (or any
+`~datalad_fuse.adapter.DatasetAdapter` takes the path to a dataset (or any
 git-annex repository), and opens files by their path relative to the
 dataset's top directory:
 
@@ -30,7 +39,7 @@ dataset's top directory:
 
    from contextlib import closing
 
-   from datalad_fuse.fsspec import DatasetAdapter
+   from datalad_fuse.adapter import DatasetAdapter
 
    with closing(DatasetAdapter("000582", caching=False)) as dsa:
        with dsa.open(nwb_path) as f:  # binary mode, like open(..., "rb")
@@ -50,8 +59,10 @@ dataset's top directory:
 
 - for files read from disk (not annexed, or with content present), a regular
   Python file object;
-- for files read from a URL, an fsspec file object, which fetches data as it
-  is read.
+- for files read from a URL, an object from the backend that opened it, which
+  fetches data as it is read: an fsspec file object from the ``fsspec``
+  backend, a `~datalad_fuse.remfile.RemfileWrapper` from ``remfile`` (see
+  :ref:`concepts-backends`).
 
 Text mode (``"r"`` or ``"rt"``) accepts ``encoding`` (default ``"utf-8"``) and
 ``errors`` arguments, as the built-in :func:`open` does.  Writing is not
@@ -61,6 +72,22 @@ The ``caching`` argument is required: ``True`` keeps fetched data in an
 on-disk cache inside the dataset, ``False`` only buffers them in memory while
 a file is open (see :ref:`caching`).  With ``caching=True``, ``dsa.clear()``
 removes the dataset's cache.
+
+The optional ``backends`` argument chooses which backends to read remote
+files with, as a comma-separated, priority-ordered string:
+
+.. code-block:: python
+
+   # read every file with fsspec, even if remfile is installed
+   DatasetAdapter("000582", caching=False, backends="fsspec")
+
+Without it, the ``datalad.fusefs.backends`` configuration option is used, and
+failing that the default ``"remfile,fsspec"``
+(`~datalad_fuse.backends.DEFAULT_BACKENDS`).  See :ref:`concepts-backends`
+for what the backends do.
+
+.. note::
+   The ``backends`` argument is newer than the 0.6.0 release.
 
 The adapter starts ``git annex`` processes to answer its queries;
 ``close()``, called by :func:`contextlib.closing` above, stops them.
@@ -95,7 +122,7 @@ objects; use a FUSE mount for them (see :ref:`python-mount`).
 Inspecting files
 ----------------
 
-`~datalad_fuse.fsspec.DatasetAdapter.get_file_state` tells whether a file is
+`~datalad_fuse.adapter.DatasetAdapter.get_file_state` tells whether a file is
 annexed and whether its content is present, and returns its git-annex key as
 an `~datalad_fuse.utils.AnnexKey`:
 
@@ -132,19 +159,19 @@ The possible states are described in :doc:`concepts`.
 Datasets with subdatasets
 =========================
 
-`~datalad_fuse.fsspec.FsspecAdapter` works on a dataset together with its
-installed subdatasets: for each path, it finds the (sub)dataset that contains
-it and uses a `~datalad_fuse.fsspec.DatasetAdapter` for that dataset.  It is a
-context manager:
+`~datalad_fuse.adapter.RemoteFilesystemAdapter` works on a dataset together
+with its installed subdatasets: for each path, it finds the (sub)dataset that
+contains it and uses a `~datalad_fuse.adapter.DatasetAdapter` for that
+dataset.  It is a context manager:
 
 .. code-block:: python
 
    from pathlib import Path
 
-   from datalad_fuse.fsspec import FsspecAdapter
+   from datalad_fuse.adapter import RemoteFilesystemAdapter
 
    root = Path("path/to/superdataset").resolve()
-   with FsspecAdapter(root, caching=False) as fsa:
+   with RemoteFilesystemAdapter(root, caching=False) as fsa:
        path = root / "subdataset" / "data" / "file.nwb"
        print(fsa.get_file_state(path))
        print(fsa.is_under_annex(path))
@@ -158,7 +185,7 @@ context manager:
 Besides ``open()``, ``get_file_state()`` and ``is_under_annex()``, it offers
 ``get_commit_datetime()`` (the date of the last commit of the dataset
 containing a path) and ``resolve_dataset()`` (the
-`~datalad_fuse.fsspec.DatasetAdapter` and relative path used for a path).
+`~datalad_fuse.adapter.DatasetAdapter` and relative path used for a path).
 
 
 .. _python-commands:

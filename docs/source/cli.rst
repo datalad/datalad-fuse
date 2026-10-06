@@ -67,6 +67,11 @@ Options
    (see :ref:`caching`).  The default, ``none``, only buffers data in memory
    while a file is open.
 
+``--backends <list>``
+   Comma-separated, priority-ordered backends to read remote files with, e.g.
+   ``--backends fsspec``.  The default is ``remfile,fsspec`` (see
+   :ref:`concepts-backends`).
+
 ``--allow-other``
    Let other users access the mount; by default, only the user who mounted
    it can.  This requires the line ``user_allow_other`` in
@@ -120,13 +125,23 @@ content of a file can be reached, or to look at the header of a file:
 
 The output is the raw content of the file, without any result rendering, so
 it can be piped into other tools.  ``--caching ondisk`` stores the fetched
-data in the dataset's cache.
+data in the dataset's cache, and ``--backends`` chooses the backends to read
+with, as for ``datalad fusefs`` above.
+
+Because it reports errors directly, ``datalad fsspec-head`` is also a handy
+way to check which backend handles a file, with debug logging:
+
+.. code-block:: console
+
+   $ datalad -l debug fsspec-head -d ds -c 8 sub-01/sub-01_ecephys.nwb 2>&1 | grep backend
+   [DEBUG] sub-01/sub-01_ecephys.nwb: opening via backend remfile
 
 
 Clearing the cache: ``datalad fsspec-cache-clear``
 ==================================================
 
-Removes the on-disk cache of a dataset (``.git/datalad/cache/fsspec/``):
+Removes the on-disk caches of a dataset (``.git/datalad/cache/``, one
+directory per backend):
 
 .. code-block:: console
 
@@ -134,3 +149,25 @@ Removes the on-disk cache of a dataset (``.git/datalad/cache/fsspec/``):
 
 Add ``-r`` (``--recursive``) to also clear the caches of all installed
 subdatasets.
+
+
+.. _cli-backends:
+
+Choosing the backends
+=====================
+
+``datalad fusefs`` and ``datalad fsspec-head`` both take ``--backends``, a
+comma-separated, priority-ordered list of the backends to read remote files
+with (see :ref:`concepts-backends`).  Without it, the configuration option
+``datalad.fusefs.backends`` is used, and failing that the default
+``remfile,fsspec``.  Set the option like any DataLad or git configuration
+option, for a dataset, globally, or for a single call:
+
+.. code-block:: console
+
+   $ git config datalad.fusefs.backends fsspec            # in a dataset
+   $ git config --global datalad.fusefs.backends fsspec   # everywhere
+   $ datalad -c datalad.fusefs.backends=fsspec fsspec-head -d ds -c 8 file.nwb
+
+``datalad fsspec-cache-clear`` needs no such option: it clears the caches of
+all backends.

@@ -67,8 +67,9 @@ def resolve_backends(
 
     Returns ``(spec, explicit)`` where ``explicit`` is True when the user (or
     config) supplied the spec and False when falling back to
-    :data:`DEFAULT_BACKENDS`.  Callers use ``explicit`` to decide whether a
-    missing backend is a warning (explicit) or a silent skip (default).
+    :data:`~datalad_fuse.backends.DEFAULT_BACKENDS`.  Callers use
+    ``explicit`` to decide whether a missing backend is a warning (explicit)
+    or a silent skip (default).
     """
     if backends is not None:
         return backends, True
@@ -210,8 +211,8 @@ class DatasetAdapter:
     backends : str, optional
         Comma-separated, priority-ordered backends to try, e.g.
         ``"remfile,fsspec"``.  Defaults to the ``datalad.fusefs.backends``
-        configuration option, or to :data:`~datalad_fuse.backends
-        .DEFAULT_BACKENDS`.
+        configuration option, or to
+        :data:`~datalad_fuse.backends.DEFAULT_BACKENDS`.
 
     Notes
     -----

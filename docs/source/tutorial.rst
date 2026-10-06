@@ -22,7 +22,14 @@ the packages used to read and plot the data:
 
 .. code-block:: console
 
-   $ python3 -m pip install datalad-fuse h5py pynwb matplotlib
+   $ python3 -m pip install "datalad-fuse[remfile]" h5py pynwb matplotlib
+
+The ``[remfile]`` extra pulls in `remfile
+<https://github.com/flatironinstitute/remfile>`_, which ``datalad-fuse`` then
+uses for NWB and other HDF5 files; it is written for the access pattern of
+HDF5 libraries and is noticeably faster for them (see
+:ref:`concepts-backends`).  Everything below works without it too, just more
+slowly.
 
 The FUSE part of the tutorial also uses ``h5ls`` from the HDF5 command-line
 tools (``sudo apt-get install hdf5-tools`` on Debian/Ubuntu, or ``conda install
@@ -91,7 +98,7 @@ prints the first bytes of the file, here the signature of an HDF5 file:
 Read the data from Python
 =========================
 
-`DatasetAdapter <datalad_fuse.fsspec.DatasetAdapter>` gives access to the
+`DatasetAdapter <datalad_fuse.adapter.DatasetAdapter>` gives access to the
 files of one dataset, addressed by paths relative to the dataset's top
 directory.  Its ``open()`` method returns a file object that h5py, and hence
 PyNWB, can read from:
@@ -105,7 +112,7 @@ PyNWB, can read from:
    import numpy as np
    import pynwb
 
-   from datalad_fuse.fsspec import DatasetAdapter
+   from datalad_fuse.adapter import DatasetAdapter
 
    nwb_path = "sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb"
 
@@ -262,13 +269,13 @@ or, for a mount:
 
    $ datalad fusefs -d 000582 --foreground --caching ondisk mnt &
 
-The cache is kept inside the dataset, under ``.git/datalad/cache/fsspec/``,
-and holds only the parts of files that were read:
+The cache is kept inside the dataset, under ``.git/datalad/cache/``, one
+directory per backend, and holds only the parts of files that were read:
 
 .. code-block:: console
 
-   $ du -sh 000582/.git/datalad/cache/fsspec
-   10M	000582/.git/datalad/cache/fsspec
+   $ du -sh 000582/.git/datalad/cache/*
+   12M	000582/.git/datalad/cache/remfile
 
 Remove it when it is no longer needed:
 

@@ -5,18 +5,22 @@
 `datalad-fuse` lets you read files of [DataLad](https://www.datalad.org)
 datasets and [git-annex](https://git-annex.branchable.com) repositories
 without downloading them first: only the parts of files that are actually
-read are fetched, via [fsspec](https://filesystem-spec.readthedocs.io), from
-the URLs that git-annex knows.  Unlike `datalad get`, which downloads whole
-files before you can use them, this pays off when you need only parts of
-large files, e.g. a few arrays from NWB/HDF5 files or the headers of many
-images.  Use it through a FUSE mount, so that any program can open the files,
-or directly from Python.
+read are fetched, from the URLs that git-annex knows, via
+[fsspec](https://filesystem-spec.readthedocs.io) or — for NWB/HDF5 files, if
+installed — [remfile](https://github.com/flatironinstitute/remfile).  Unlike
+`datalad get`, which downloads whole files before you can use them, this pays
+off when you need only parts of large files, e.g. a few arrays from NWB/HDF5
+files or the headers of many images.  Use it through a FUSE mount, so that
+any program can open the files, or directly from Python.
 
 **Documentation: https://datalad-fuse.readthedocs.io**
 
 ## Installation
 
     python3 -m pip install datalad-fuse
+
+Add the `remfile` backend, which is faster for NWB/HDF5 files, with
+`python3 -m pip install "datalad-fuse[remfile]"`.
 
 [git-annex](https://git-annex.branchable.com/install/) is required, and FUSE
 for mounting datasets (e.g. `sudo apt-get install fuse3 libfuse2t64` on
@@ -52,7 +56,7 @@ from contextlib import closing
 import h5py
 import pynwb
 
-from datalad_fuse.fsspec import DatasetAdapter
+from datalad_fuse.adapter import DatasetAdapter
 
 # caching=False: keep fetched data in memory only
 with closing(DatasetAdapter("000582", caching=False)) as dsa:

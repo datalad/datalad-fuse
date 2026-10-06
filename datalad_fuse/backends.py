@@ -7,6 +7,8 @@ from typing import IO, Any, Optional
 
 from .utils import AnnexKey
 
+#: Backends used when neither ``--backends`` nor the
+#: ``datalad.fusefs.backends`` configuration option is set.
 DEFAULT_BACKENDS = "remfile,fsspec"
 
 
