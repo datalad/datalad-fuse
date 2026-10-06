@@ -27,8 +27,9 @@ tox -e py3
 
 ### FUSE mount tests
 
-Requires FUSE system libraries (e.g. `apt-get install fuse3 libfuse2t64` on
-Ubuntu 24.04; see the installation instructions in the documentation):
+Requires FUSE system libraries (`apt-get install fuse3` on Debian/Ubuntu).
+If libfuse 2 is installed as well, it is used unless `FUSE_LIBRARY_NAME=fuse3`
+is set:
 
 ```bash
 tox -e py3 -- --libfuse
@@ -41,16 +42,16 @@ container, create a repository with annexed content, and verify that
 datalad-fuse can transparently access files via the `annex/objects`
 HTTP endpoint.
 
-**Requirements**: `podman` or `docker` must be available.  By default,
-failing to start the container is an error, so you see exactly what went
-wrong.  With `--no-forgejo`, the forgejo tests are skipped instead.
+**Requirements**: `podman` or `docker` must be available.  Without
+`--forgejo`, tests auto-skip when the container cannot start.  With
+`--forgejo`, failures are fatal so you see exactly what went wrong.
 
 ```bash
 # Run forgejo tests, fail loudly on container problems
-tox -e py3 -- -k forgejo
+tox -e py3 -- --forgejo -k forgejo
 
-# Run all tests, skipping the forgejo tests
-tox -e py3 -- --no-forgejo
+# Run all tests (forgejo tests auto-skip if container unavailable)
+tox -e py3
 ```
 
 #### Environment variables
@@ -81,7 +82,7 @@ random name (`test-annex-XXXXXXXX`) and is deleted on teardown.
 
 The tests use:
 ```
-codeberg.org/forgejo-aneksajo/forgejo-aneksajo:v14.0.3-git-annex2-rootless
+codeberg.org/forgejo-aneksajo/forgejo-aneksajo:forgejo-rootless
 ```
 
 When `DATALAD_TESTS_CONTAINER_PERSIST` is set, the container is named

@@ -77,14 +77,14 @@ Errors about paths
   from `~datalad_fuse.fsspec.FsspecAdapter`: use an absolute ``root`` and
   absolute paths (see :doc:`python`).
 
-Reading a file in the mount fails with an odd error
----------------------------------------------------
+Reading a file in the mount fails with "Invalid argument"
+---------------------------------------------------------
 
 When the content of a file cannot be fetched, programs reading it from the
-mount report a generic error such as "Input/output error", or even
-"Numerical result out of range".  Run ``datalad fsspec-head`` on the same file
-to see the actual problem, or mount with ``datalad -l debug fusefs ...`` to
-see the URLs that are tried.
+mount only report a generic error such as "Invalid argument".  The actual
+error, e.g. "Could not find a usable URL ...", is printed by ``datalad
+fusefs``.  ``datalad fsspec-head`` on the same file reports it directly, and
+``datalad -l debug fusefs ...`` shows the URLs that are tried.
 
 "Unable to find libfuse" or "fuse: device not found"
 ----------------------------------------------------

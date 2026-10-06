@@ -93,11 +93,11 @@ autosummary_generate = True
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
 autodoc_default_options = {"members": True}
-# fusepy needs libfuse at import time; mock it if libfuse is not installed
+# mfusepy needs libfuse at import time; mock it if libfuse is not installed
 try:
-    import fuse  # noqa: F401
+    import mfusepy  # noqa: F401
 except (ImportError, OSError):
-    autodoc_mock_imports = ["fuse"]
+    autodoc_mock_imports = ["mfusepy"]
 
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True

@@ -13,23 +13,15 @@ Requirements
   <https://handbook.datalad.org/en/latest/intro/installation.html>`_ covers
   more options.
 - **FUSE**, only for mounting datasets with ``datalad fusefs``.  The
-  `fusepy <https://github.com/fusepy/fusepy>`_ bindings used by
-  ``datalad-fuse`` need the FUSE 2 library (``libfuse.so.2``), plus the
-  ``fusermount`` helper, which FUSE 3 also provides.  On recent Debian and
-  Ubuntu releases, add the FUSE 2 library to FUSE 3 (installing the ``fuse``
-  package there would remove ``fuse3`` and packages depending on it):
+  `mfusepy <https://github.com/mxmlnkn/mfusepy>`_ bindings used by
+  ``datalad-fuse`` work with the FUSE 3 or the FUSE 2 library, together with
+  its ``fusermount3`` or ``fusermount`` helper.  On Debian and Ubuntu::
 
-  - Debian 13 (trixie), Ubuntu 24.04 and newer::
+        sudo apt-get install fuse3
 
-        sudo apt-get install fuse3 libfuse2t64
-
-  - Debian 12 (bookworm), Ubuntu 22.04::
-
-        sudo apt-get install fuse3 libfuse2
-
-  - older releases::
-
-        sudo apt-get install fuse
+  (``sudo apt-get install fuse`` on releases without the ``fuse3`` package).
+  If both libraries are installed, FUSE 2 is used; set the environment
+  variable ``FUSE_LIBRARY_NAME=fuse3`` to use FUSE 3 instead.
 
   FUSE mounts are developed and tested on Linux.  Opening files from Python
   (see :doc:`python`) and ``datalad fsspec-head`` do not need FUSE at all.
