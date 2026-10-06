@@ -11,7 +11,20 @@ from datalad_fuse.consts import CACHE_SIZE
 
 @dataclass
 class AnnexKey:
-    # <https://git-annex.branchable.com/internals/key_format/>
+    """A git-annex key, parsed into its fields
+
+    See <https://git-annex.branchable.com/internals/key_format/>.
+    ``str()`` of an instance gives back the key.
+
+    Examples
+    --------
+    >>> k = AnnexKey.parse("SHA256E-s1024--0123abcd.nwb")
+    >>> k.backend, k.size, k.name, k.suffix
+    ('SHA256E', 1024, '0123abcd', '.nwb')
+    >>> str(k)
+    'SHA256E-s1024--0123abcd.nwb'
+    """
+
     backend: str
     name: str
     size: Optional[int] = None
@@ -37,6 +50,7 @@ class AnnexKey:
 
     @classmethod
     def parse(cls, s: str) -> AnnexKey:
+        """Parse a key; raises `ValueError` if ``s`` is not a valid key"""
         m = re.fullmatch(
             r"(?P<backend>[A-Z0-9_]{2,14})"
             r"(?:-s(?P<size>[0-9]+))?"
@@ -73,6 +87,10 @@ class AnnexKey:
 
     @classmethod
     def parse_filename(cls, s: str) -> AnnexKey:
+        """Parse a key from the name of a file under ``.git/annex/objects/``
+
+        Such names escape some characters of the key (e.g. ``/`` as ``%``).
+        """
         fields, sep, name = s.partition("--")
         # See `keyFile` and `fileKey` in `Annex/Locations.hs` in the git-annex
         # source
@@ -87,12 +105,21 @@ class AnnexKey:
 
 @dataclass
 class AnnexDir:
+    """A (hashing) directory under ``.git/annex/objects/`` of a repository"""
+
+    #: Top directory of the repository
     topdir: str
 
 
 # might be called twice in rapid succession for an annex key path
 @lru_cache(maxsize=CACHE_SIZE)
 def is_annex_dir_or_key(path: str | Path) -> AnnexDir | AnnexKey | None:
+    """Tell whether ``path`` points into ``.git/annex/objects/``
+
+    Returns an `AnnexKey` for a key file
+    (``.git/annex/objects/Xx/Yy/KEY/KEY``), an `AnnexDir` for a directory
+    leading to one, and ``None`` otherwise.
+    """
     parts = list(Path(path).parts)
     start = 0
     while True:

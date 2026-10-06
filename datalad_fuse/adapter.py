@@ -34,7 +34,19 @@ from .utils import AnnexKey, is_annex_dir_or_key
 
 lgr = logging.getLogger("datalad.fuse.adapter")
 
-FileState = Enum("FileState", "NOT_ANNEXED NO_CONTENT HAS_CONTENT")
+
+class FileState(Enum):
+    """State of a file in a dataset, as returned by ``get_file_state()``"""
+
+    #: The file is not annexed (e.g. committed to git directly); it is read
+    #: from disk.
+    NOT_ANNEXED = 1
+    #: The file is annexed but its content is not present locally; it is read
+    #: from a remote URL.
+    NO_CONTENT = 2
+    #: The file is annexed and its content is present locally; it is read from
+    #: disk.
+    HAS_CONTENT = 3
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +186,39 @@ def _is_aneksajo(base_url: str) -> bool:
 
 
 class DatasetAdapter:
+    """Read access to the files of a single dataset.
+
+    Files that are not annexed, and annexed files whose content is present
+    locally, are opened from disk.  Annexed files without local content are
+    opened from one of the http(s) URLs found for their git-annex key (see
+    :meth:`get_urls`), reading only the needed parts of the file.
+
+    Parameters
+    ----------
+    path : str or Path
+        Top directory of the dataset (any git or git-annex repository).
+    caching : bool
+        If true, keep the data fetched from remote URLs in a sparse on-disk
+        cache under ``<path>/.git/datalad/cache/`` (one subdirectory per
+        backend), to be reused by subsequent reads (for up to a week with the
+        ``fsspec`` backend).  If false, data are only buffered in memory while
+        a file is open.
+    mode_transparent : bool
+        If true, paths of key files under ``.git/annex/objects/`` (the targets
+        of annexed symlinks) are opened as annexed content, fetched from a
+        remote URL if not present locally.
+    backends : str, optional
+        Comma-separated, priority-ordered backends to try, e.g.
+        ``"remfile,fsspec"``.  Defaults to the ``datalad.fusefs.backends``
+        configuration option, or to :data:`~datalad_fuse.backends
+        .DEFAULT_BACKENDS`.
+
+    Notes
+    -----
+    Call :meth:`close` (or use :func:`contextlib.closing`) when done, to stop
+    the ``git annex`` processes started for the dataset.
+    """
+
     def __init__(
         self,
         path: str | Path,
@@ -196,11 +241,26 @@ class DatasetAdapter:
         self._backends = create_backends(spec, path, caching, explicit=explicit)
 
     def close(self) -> None:
+        """Stop the batched ``git annex`` processes started for the dataset"""
         if self.annex is not None:
             self.annex._batched.clear()
 
     @methodtools.lru_cache(maxsize=CACHE_SIZE)
     def get_file_state(self, relpath: str) -> tuple[FileState, Optional[AnnexKey]]:
+        """Determine whether a file is annexed and has its content present
+
+        Results are cached (for the most recently queried files).
+
+        Parameters
+        ----------
+        relpath : str
+            Path of the file relative to the top directory of the dataset.
+
+        Returns
+        -------
+        tuple of (FileState, AnnexKey or None)
+            The state of the file, and its git-annex key if it is annexed.
+        """
         p = self.path / relpath
         lgr.debug("get_file_state: %s", relpath)
 
@@ -236,6 +296,24 @@ class DatasetAdapter:
         )
 
     def get_urls(self, key: str) -> Iterator[str]:
+        """Yield candidate http(s) URLs for the content of an annex key
+
+        URLs are yielded in the order in which they are tried by :meth:`open`:
+
+        1. http(s) URLs recorded in git-annex for the key, as reported by
+           ``git annex whereis`` (e.g. those of the ``web`` special remote);
+        2. ``annex/objects/...`` locations on the http(s) git remotes that
+           ``git annex whereis`` lists as having the key, including the
+           ``annex/objects`` endpoint of Forgejo-aneksajo instances.
+
+        URLs on S3 special remotes with ``exporttree=yes`` are not included;
+        :meth:`open` falls back to them via :meth:`get_exporttree_urls`.
+
+        Parameters
+        ----------
+        key : str
+            A git-annex key, e.g. ``str(AnnexKey)``.
+        """
         assert self.annex is not None
         # TODO: switch to batch=True whenever
         # https://github.com/datalad/datalad/pull/6379 is merged/released.
@@ -475,6 +553,43 @@ class DatasetAdapter:
         encoding: str = "utf-8",
         errors: Optional[str] = None,
     ) -> IO:
+        """Open a file of the dataset for reading
+
+        Annexed files without local content are opened by the first configured
+        backend that can handle them (see
+        :meth:`~datalad_fuse.backends.Backend.can_handle`), trying each
+        candidate URL in turn; if none of them works, the next backend is
+        tried.
+
+        Parameters
+        ----------
+        relpath : str
+            Path of the file relative to the top directory of the dataset.
+        mode : str
+            ``"rb"`` (default) to get a binary file object, ``"r"`` or
+            ``"rt"`` to get a text file object.
+        encoding : str
+            Encoding to use in text mode.
+        errors : str, optional
+            How to handle encoding errors in text mode, as for :func:`open`.
+
+        Returns
+        -------
+        file object
+            A seekable, read-only file object.  Files read from disk are
+            regular Python file objects; files read from a URL are whatever
+            the backend that opened them returns (an fsspec file object for
+            the ``fsspec`` backend, a
+            :class:`~datalad_fuse.remfile.RemfileWrapper` for ``remfile``).
+
+        Raises
+        ------
+        NotImplementedError
+            If ``mode`` is not one of the supported read modes.
+        IOError
+            If the content of an annexed file is not present locally and no
+            backend could open any of its candidate URLs.
+        """
         if mode not in ("r", "rb", "rt"):
             raise NotImplementedError("Only modes 'r', 'rb', and 'rt' are supported")
         if mode == "rb":
@@ -556,15 +671,34 @@ class DatasetAdapter:
             return open(self.path / relpath, mode, **kwargs)  # type: ignore[return-value]
 
     def clear(self) -> None:
+        """Remove the on-disk caches of the dataset (only if ``caching``)"""
         for backend in self._backends:
             backend.clear()
 
 
 class RemoteFilesystemAdapter:
-    """Top-level context manager for accessing remote files within a DataLad dataset.
+    """Read access to the files of a dataset and its installed subdatasets.
 
-    Resolves paths to their owning dataset, creates per-dataset
-    :class:`DatasetAdapter` instances, and delegates file operations to them.
+    Each path is mapped to the (sub)dataset containing it, and a
+    :class:`DatasetAdapter` is created for that dataset on first use.  Use it
+    as a context manager, so that the ``git annex`` processes started for the
+    datasets are stopped on exit.
+
+    Parameters
+    ----------
+    root : str or Path
+        Top directory of the (super)dataset.
+    caching : bool
+        Passed to each :class:`DatasetAdapter`.
+    mode_transparent : bool
+        Passed to each :class:`DatasetAdapter`.
+    backends : str, optional
+        Passed to each :class:`DatasetAdapter`.
+
+    Notes
+    -----
+    Use an absolute ``root``, and absolute paths under it for the methods.
+    Paths relative to ``root`` or to the current directory are not supported.
     """
 
     def __init__(
@@ -597,6 +731,7 @@ class RemoteFilesystemAdapter:
     # TODO: optimize "caching" more since for all files under the same directory
     # they all would belong to the same dataset
     def get_dataset_path(self, path: str | Path) -> Path:
+        """Return the top directory of the (sub)dataset containing ``path``"""
         path = Path(self.root, path)
         dspath = get_dataset_root(path)
         if dspath is None:
@@ -610,6 +745,14 @@ class RemoteFilesystemAdapter:
         return dspath
 
     def resolve_dataset(self, filepath: str | Path) -> tuple[DatasetAdapter, str]:
+        """Return the adapter for the dataset containing ``filepath``
+
+        Returns
+        -------
+        tuple of (DatasetAdapter, str)
+            The adapter, and the path of ``filepath`` relative to the
+            dataset's top directory.
+        """
         dspath = self.get_dataset_path(filepath)
         try:
             dsap = self.datasets[dspath]
@@ -630,6 +773,7 @@ class RemoteFilesystemAdapter:
         encoding: str = "utf-8",
         errors: Optional[str] = None,
     ) -> IO:
+        """Open a file for reading; see :meth:`DatasetAdapter.open`"""
         dsap, relpath = self.resolve_dataset(filepath)
         lgr.debug(
             "%s: path resolved to %s in dataset at %s", filepath, relpath, dsap.path
@@ -639,14 +783,17 @@ class RemoteFilesystemAdapter:
     def get_file_state(
         self, filepath: str | Path
     ) -> tuple[FileState, Optional[AnnexKey]]:
+        """Return state and key of a file; see `DatasetAdapter.get_file_state`"""
         dsap, relpath = self.resolve_dataset(filepath)
         return cast(Tuple[FileState, Optional[AnnexKey]], dsap.get_file_state(relpath))
 
     def is_under_annex(self, filepath: str | Path) -> bool:
+        """Tell whether a file is annexed"""
         dsap, relpath = self.resolve_dataset(filepath)
         fstate, _ = dsap.get_file_state(relpath)
         return fstate is not FileState.NOT_ANNEXED
 
     def get_commit_datetime(self, filepath: str | Path) -> datetime:
+        """Return the date of ``HEAD`` in the dataset containing ``filepath``"""
         dsap, _ = self.resolve_dataset(filepath)
         return dsap.commit_dt

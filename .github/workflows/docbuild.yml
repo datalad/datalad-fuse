@@ -8,15 +8,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v6
+    - uses: actions/checkout@v7
       with:
-        python-version: 3.9
+        # versioneer derives the version from git tags
+        fetch-depth: 0
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
     - name: Install dependencies
       run: |
+        # fusepy, imported to document the FUSE file system class, needs libfuse2
+        sudo apt-get update -qq
+        sudo apt-get install -y libfuse2t64
         python -m pip install --upgrade pip
-        pip install -r requirements-devel.txt
+        pip install -r docs/requirements.txt
         pip install .
     - name: Build docs
       run: |
