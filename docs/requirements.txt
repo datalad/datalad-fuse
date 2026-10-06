@@ -1,0 +1,9 @@
+# Requirements for building the documentation, locally, in CI and on
+# Read the Docs (see .readthedocs.yaml).  datalad-fuse itself must be
+# installed as well (e.g. `pip install -e .`).
+myst-parser
+# setup.py build_manpage generates the command line reference
+setuptools
+sphinx >= 7
+sphinx-copybutton
+sphinx_rtd_theme >= 2

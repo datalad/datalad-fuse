@@ -1,3 +1,2 @@
 # requirements for a development environment
-sphinx
-sphinx_rtd_theme
+-r docs/requirements.txt
