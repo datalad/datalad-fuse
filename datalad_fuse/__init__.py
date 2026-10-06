@@ -94,7 +94,7 @@ class FuseFS(Interface):
             args=("--caching",),
             choices=["none", "ondisk"],
             default="none",
-            doc="Whether to cache fsspec'ed files on disk on not at all",
+            doc="Whether to cache data fetched from remote URLs on disk or not at all",
         ),
         "backends": Parameter(
             args=("--backends",),
