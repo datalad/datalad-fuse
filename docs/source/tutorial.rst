@@ -24,6 +24,13 @@ the packages used to read and plot the data:
 
    $ python3 -m pip install datalad-fuse h5py pynwb matplotlib
 
+The FUSE part of the tutorial also uses ``h5ls`` from the HDF5 command-line
+tools (``sudo apt-get install hdf5-tools`` on Debian/Ubuntu, or ``conda install
+-c conda-forge hdf5``); any other program that reads files would do as well.
+
+Run all commands and Python code from the same directory: the one in which
+you clone the dandiset (so that it contains ``000582/``).
+
 
 Get the dandiset
 ================
@@ -36,9 +43,16 @@ the DANDI API.  Clone the dandiset with DataLad (or plain ``git clone``):
 .. code-block:: console
 
    $ datalad clone https://github.com/dandisets/000582
+   [INFO] Attempting a clone into /home/me/000582
+   ...
+   [INFO] access to 2 dataset siblings dandi-dandisets-dropbox, dandiapi not auto-enabled, enable with:
+   | 		datalad siblings -d "/home/me/000582" enable -s SIBLING
    install(ok): /home/me/000582 (dataset)
    $ du -sh 000582
    2.2M	000582
+
+You can ignore the ``[INFO]`` messages, including the suggestion to enable
+siblings: ``datalad-fuse`` does not need them.
 
 The clone holds all file names but no annexed content, which would be
 1.86 GB.  Annexed files are symlinks that point to content which is not
@@ -46,15 +60,14 @@ there:
 
 .. code-block:: console
 
-   $ cd 000582
-   $ ls -l sub-10073/
+   $ ls -l 000582/sub-10073/
    lrwxrwxrwx 1 me me 203 Oct  6 19:35 sub-10073_ses-17010302_behavior+ecephys.nwb -> ../.git/annex/objects/vq/Z5/SHA256E-s15657857--43b3....nwb/SHA256E-s15657857--43b3....nwb
 
-``git annex whereis`` shows the URLs that ``datalad-fuse`` will use:
+``git annex whereis`` shows where the content of a file can be found:
 
 .. code-block:: console
 
-   $ git annex whereis sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb
+   $ git -C 000582 annex whereis sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb
    whereis sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb (1 copy)
      	00000000-0000-0000-0000-000000000001 -- web
    ...
@@ -62,15 +75,17 @@ there:
      web: https://dandiarchive.s3.amazonaws.com/blobs/26a/22c/26a22c31-09bc-43a4-9187-edc7394ed12c?versionId=__7hm7itizkF8RCsvO.Fidzi7Lqd1OMu
    ok
 
+The ``web:`` lines are the URLs that ``datalad-fuse`` will read the content
+from, trying them in this order.
+
 A quick check that the content can be reached: ``datalad fsspec-head``
 prints the first bytes of the file, here the signature of an HDF5 file:
 
 .. code-block:: console
 
-   $ datalad fsspec-head -c 8 sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb | od -c
+   $ datalad fsspec-head -d 000582 -c 8 sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb | od -c
    0000000 211   H   D   F  \r  \n 032  \n
    0000010
-   $ cd ..
 
 
 Read the data from Python
@@ -94,6 +109,8 @@ PyNWB, can read from:
 
    nwb_path = "sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb"
 
+   # caching=False: keep fetched data in memory only (see "Keep fetched data
+   # in a cache" below)
    with closing(DatasetAdapter("000582", caching=False)) as dsa:
        with dsa.open(nwb_path) as f, h5py.File(f, "r") as h5:
            with pynwb.NWBHDF5IO(file=h5) as io:
@@ -125,12 +142,33 @@ Some things to note:
   sliced (``position.data[:, 0]``), and only the parts of the file needed for
   that slice are fetched.  Read everything you need *before* the ``with``
   blocks close the file; ``units_df``, ``ts`` and ``x`` above are in-memory
-  copies that remain usable afterwards.
+  copies that remain usable afterwards.  Reading from ``position.data`` after
+  the file was closed fails with an error mentioning "identifier is not of
+  specified type".
 - ``closing()`` makes sure that the ``git annex`` processes started by the
   adapter are stopped when you are done.
 - No DANDI-specific code was needed: the file was found by its path in the
   dataset, and its URL came from git-annex.  The same code works for any
   dataset whose annexed content is reachable over HTTP(S).
+
+When exploring data interactively, e.g. in Jupyter, ``with`` blocks are
+impractical.  Open everything step by step instead, and close it in reverse
+order when you are done:
+
+.. code-block:: python
+
+   dsa = DatasetAdapter("000582", caching=True)
+   f = dsa.open(nwb_path)
+   h5 = h5py.File(f, "r")
+   io = pynwb.NWBHDF5IO(file=h5)
+   nwbfile = io.read()
+
+   # ... explore nwbfile in further cells ...
+
+   io.close()
+   h5.close()
+   f.close()
+   dsa.close()
 
 From here on, the analysis part of the DANDI tutorial (e.g. computing tuning
 curves with `pynapple <https://pynapple.org>`_) applies to ``nwbfile``
@@ -141,17 +179,23 @@ Read the data through a FUSE mount
 ==================================
 
 A FUSE mount gives the same access to programs that expect file names
-rather than Python file objects.  ``datalad fusefs`` keeps running for as
-long as the dataset is mounted, so start it in the background (or in another
-terminal):
+rather than Python file objects.  First create an empty directory to mount
+the dataset on (the *mount point*), next to the dataset rather than inside
+it:
 
 .. code-block:: console
 
    $ mkdir mnt
-   $ datalad fusefs -d 000582 --foreground mnt &
 
-In the mount, annexed files look like regular files, and their content is
-fetched when it is read:
+``datalad fusefs`` keeps running for as long as the dataset is mounted, so
+start it in a terminal of its own:
+
+.. code-block:: console
+
+   $ datalad fusefs -d 000582 --foreground mnt
+
+Continue in a second terminal, in the same directory.  In the mount, annexed
+files look like regular files, and their content is fetched when it is read:
 
 .. code-block:: console
 
@@ -180,11 +224,23 @@ Python code can now use plain file names:
    with pynwb.NWBHDF5IO("mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb") as io:
        print(io.read().units.to_dataframe())
 
-When done, unmount the dataset; ``datalad fusefs`` then exits:
+When done, unmount the dataset, either by pressing :kbd:`Ctrl-C` in the
+terminal running ``datalad fusefs``, or with:
 
 .. code-block:: console
 
    $ fusermount -u mnt
+
+``datalad fusefs`` then exits, printing:
+
+.. code-block:: text
+
+   [WARNING] Destroying fsspecs and collection of 1 fhs
+   fusefs(ok): mnt
+
+The warning is harmless (the number varies).  If unmounting fails with "Device or resource busy",
+a program still uses the mount (e.g. a shell whose current directory is in
+it); see :doc:`troubleshooting`.
 
 
 Keep fetched data in a cache
@@ -236,9 +292,22 @@ of those versions of the files:
    $ git -C 000582 tag
    0.251111.2151
    $ git -C 000582 checkout 0.251111.2151
+   Note: switching to '0.251111.2151'.
 
-Recording the commit (``git -C 000582 rev-parse HEAD``) along with your
-results tells exactly which data they were computed from.
+   You are in 'detached HEAD' state. ...
+
+The "detached HEAD" message is expected: you are looking at a past version
+rather than at a branch.  To return to the latest state of the dandiset,
+check out its main branch, which is called ``draft`` for dandisets:
+
+.. code-block:: console
+
+   $ git -C 000582 checkout draft
+
+After checking out another version, create a new adapter or remount the
+dataset, as they do not notice such changes.  Recording the commit (``git -C
+000582 rev-parse HEAD``) along with your results tells exactly which data they
+were computed from.
 
 
 Next steps

@@ -26,16 +26,19 @@ Mounting a dataset: ``datalad fusefs``
    $ datalad fusefs -d path/to/dataset --foreground mnt
 
 mounts the dataset at ``path/to/dataset`` on the existing, empty directory
-``mnt``.  Without ``-d``, the dataset containing the current directory is
-mounted.
+``mnt`` (the *mount point*).  Without ``-d``, the dataset containing the
+current directory is mounted.  Create the mount point outside of the dataset:
+a mount point inside it would show up in the mount itself, and as an
+untracked directory in ``datalad status``.
 
 The ``--foreground`` (``-f``) option is currently required: the command keeps
-running for as long as the dataset is mounted.  Run it in a separate
-terminal, in the background (append ``&``), or in a ``tmux``/``screen``
-session.
+running for as long as the dataset is mounted.  Run it in a terminal of its
+own, or in a ``tmux``/``screen`` session.  When running it in the background
+of a shell (appending ``&``), wait until the mount is ready before using it,
+e.g. with ``until mountpoint -q mnt; do sleep 0.1; done``.
 
-To unmount, press :kbd:`Ctrl-C` in the terminal where ``datalad fusefs`` runs,
-or run:
+To unmount, press :kbd:`Ctrl-C` in the terminal where ``datalad fusefs`` runs
+(for a background job, bring it to the foreground with ``fg`` first), or run:
 
 .. code-block:: console
 

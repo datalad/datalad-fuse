@@ -6,8 +6,11 @@
 datasets and [git-annex](https://git-annex.branchable.com) repositories
 without downloading them first: only the parts of files that are actually
 read are fetched, via [fsspec](https://filesystem-spec.readthedocs.io), from
-the URLs that git-annex knows.  Use it through a FUSE mount, so that any
-program can open the files, or directly from Python.
+the URLs that git-annex knows.  Unlike `datalad get`, which downloads whole
+files before you can use them, this pays off when you need only parts of
+large files, e.g. a few arrays from NWB/HDF5 files or the headers of many
+images.  Use it through a FUSE mount, so that any program can open the files,
+or directly from Python.
 
 **Documentation: https://datalad-fuse.readthedocs.io**
 
@@ -16,8 +19,9 @@ program can open the files, or directly from Python.
     python3 -m pip install datalad-fuse
 
 [git-annex](https://git-annex.branchable.com/install/) is required, and FUSE
-for mounting datasets (`sudo apt-get install fuse` on Debian/Ubuntu).  See
-the [installation instructions](https://datalad-fuse.readthedocs.io/en/latest/installation.html)
+for mounting datasets (e.g. `sudo apt-get install fuse3 libfuse2t64` on
+Ubuntu 24.04).  See the
+[installation instructions](https://datalad-fuse.readthedocs.io/en/latest/installation.html)
 for details.
 
 ## Example
@@ -28,10 +32,15 @@ file content:
 
     datalad clone https://github.com/dandisets/000582
 
-On the command line, mount the dataset and use any tool on its files:
+On the command line, mount the dataset; `datalad fusefs` keeps running until
+the dataset is unmounted:
 
     mkdir mnt
-    datalad fusefs -d 000582 --foreground mnt &
+    datalad fusefs -d 000582 --foreground mnt
+
+Then, in another terminal, use any tool on its files (here `h5ls` from the
+HDF5 tools), and unmount when done:
+
     h5ls mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb
     fusermount -u mnt
 
@@ -45,6 +54,7 @@ import pynwb
 
 from datalad_fuse.fsspec import DatasetAdapter
 
+# caching=False: keep fetched data in memory only
 with closing(DatasetAdapter("000582", caching=False)) as dsa:
     with dsa.open("sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb") as f:
         with h5py.File(f, "r") as h5, pynwb.NWBHDF5IO(file=h5) as io:

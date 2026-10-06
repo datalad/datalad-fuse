@@ -54,6 +54,29 @@ the file:
   may be down, or require authentication, which ``datalad-fuse`` does not
   support.
 
+Errors mentioning "identifier is not of specified type"
+-------------------------------------------------------
+
+For example ``RuntimeError: Unable to synchronously get dataspace (identifier
+is not of specified type)`` or ``OSError: Can't synchronously read data
+(identifier is not of specified type)``, from h5py when reading NWB/HDF5 data.
+The data are read lazily, after the file was already closed.  Read the data
+while the file is open, inside the ``with`` blocks (see :doc:`python`).
+
+``AttributeError: 'NoneType' object has no attribute 'get_commit_date'``
+------------------------------------------------------------------------
+
+The path given to `~datalad_fuse.fsspec.DatasetAdapter` is not a dataset (or
+git repository).  Check the path, and the current directory if the path is
+relative.
+
+``FileNotFoundError`` with ``DatasetAdapter.open()`` or ``datalad fsspec-head``
+-------------------------------------------------------------------------------
+
+Paths of files are relative to the top directory of the dataset, not to the
+current directory: use ``sub-01/file.nwb`` rather than
+``dataset/sub-01/file.nwb`` or ``file.nwb``.
+
 Reading a file in the mount fails with an odd error
 ---------------------------------------------------
 
@@ -80,6 +103,19 @@ FUSE device, e.g. with Docker::
 -------------------------------
 
 Mount on an empty directory.
+
+"Device or resource busy" when unmounting
+-----------------------------------------
+
+A program still uses the mount: a shell whose current directory is inside
+it, a file manager window, or a program with a file open in it.  Leave the
+directory or close the program, and unmount again.  As a last resort,
+``fusermount -uz mnt`` detaches the mount immediately, and finishes
+unmounting once it is no longer used.
+
+To find mounts you may have forgotten about, run ``findmnt -t fuse`` (or
+``mount | grep fuse``); mounts made by ``datalad fusefs`` are listed as
+``DataLadFUSE``.
 
 "Transport endpoint is not connected"
 -------------------------------------

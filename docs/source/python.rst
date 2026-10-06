@@ -11,7 +11,8 @@ covers:
 - the ``datalad`` commands of ``datalad-fuse``, called from Python;
 - mounting a dataset with FUSE from Python.
 
-The examples use the dandiset cloned in the :doc:`tutorial`:
+The examples use the dandiset cloned in the :doc:`tutorial`, and are run from
+the directory containing it:
 
 .. code-block:: python
 
@@ -36,6 +37,14 @@ dataset's top directory:
            print(f.read(8))  # b'\x89HDF\r\n\x1a\n'
        with dsa.open("dandiset.yaml", "rt") as f:  # text mode
            print(f.readline())
+
+.. important::
+   Many libraries (h5py, PyNWB, zarr, ...) read data *lazily*, only when you
+   access them.  The file object must stay open until all data you need have
+   been read, so do the reading inside the ``with`` blocks, or keep the
+   objects open while working interactively (see the :doc:`tutorial`).
+   Reading after the file was closed fails, with h5py with an error
+   mentioning "identifier is not of specified type".
 
 ``open()`` returns a seekable, read-only file object:
 
@@ -82,9 +91,6 @@ example:
 
 Libraries that need a file *name* rather than a file object cannot use these
 objects; use a FUSE mount for them (see :ref:`python-mount`).
-
-Libraries that read lazily (h5py, PyNWB, ...) need the file to stay open
-while data are read, so do the reading inside the ``with`` block.
 
 Inspecting files
 ----------------
@@ -197,22 +203,33 @@ program, run it in a separate process:
 
    from datalad.api import fusefs
 
-   os.makedirs("mnt", exist_ok=True)
-   mount = Process(
-       target=fusefs,
-       args=("mnt",),
-       kwargs={"dataset": "000582", "foreground": True, "caching": "ondisk"},
-   )
-   mount.start()
-   while mount.is_alive() and not os.path.ismount("mnt"):
-       time.sleep(0.1)
-   try:
-       # any code or tool can now open files under mnt/
-       with open(os.path.join("mnt", nwb_path), "rb") as f:
-           print(f.read(8))
-   finally:
-       subprocess.run(["fusermount", "-u", "mnt"], check=True)
-       mount.join()
+
+   def main():
+       os.makedirs("mnt", exist_ok=True)
+       mount = Process(
+           target=fusefs,
+           args=("mnt",),
+           kwargs={"dataset": "000582", "foreground": True, "caching": "ondisk"},
+       )
+       mount.start()
+       while mount.is_alive() and not os.path.ismount("mnt"):
+           time.sleep(0.1)
+       try:
+           # any code or tool can now open files under mnt/
+           path = "mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb"
+           with open(path, "rb") as f:
+               print(f.read(8))
+       finally:
+           subprocess.run(["fusermount", "-u", "mnt"], check=True)
+           mount.join()
+
+
+   if __name__ == "__main__":  # required by multiprocessing
+       main()
+
+Put this code in a script: the ``if __name__ == "__main__"`` guard is required
+where :mod:`multiprocessing` starts new processes by re-importing the main
+module, which is the default on macOS and, from Python 3.14 on, on Linux.
 
 To pass other FUSE mount options, mount the file system class
 `~datalad_fuse.fuse_.DataLadFUSE` directly with fusepy; keyword arguments of
