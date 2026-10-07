@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+import io
 import logging
 import multiprocessing
 import os
@@ -113,19 +114,44 @@ def tmp_home(monkeypatch, tmp_path_factory):
     return home
 
 
-def serve_path_via_http(hostname, path, queue):
+class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler which also serves ``Range: bytes=N-[M]``"""
+
+    def send_head(self):
+        m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+        path = self.translate_path(self.path)
+        if m is None or not os.path.isfile(path):
+            return super().send_head()
+        with open(path, "rb") as f:
+            size = os.fstat(f.fileno()).st_size
+            start = int(m[1])
+            end = min(int(m[2]), size - 1) if m[2] else size - 1
+            if start > end:
+                self.send_error(416)
+                return None
+            f.seek(start)
+            data = f.read(end - start + 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        return io.BytesIO(data)
+
+
+def serve_path_via_http(hostname, path, queue, handler):
     os.chdir(path)
-    httpd = HTTPServer((hostname, 0), SimpleHTTPRequestHandler)
+    httpd = HTTPServer((hostname, 0), handler)
     queue.put(httpd.server_port)
     httpd.serve_forever()
 
 
 @contextmanager
-def local_server(directory):
+def local_server(directory, handler=SimpleHTTPRequestHandler):
     hostname = "127.0.0.1"
     queue = multiprocessing.Queue()
     p = multiprocessing.Process(
-        target=serve_path_via_http, args=(hostname, directory, queue)
+        target=serve_path_via_http, args=(hostname, directory, queue, handler)
     )
     p.start()
     try:
@@ -218,24 +244,26 @@ def superdataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U1
     return (ds, {os.path.join("sub", df.path): df.content for df in served_files})
 
 
+# Larger than the 5 MiB block size of fsspec's HTTP files, so that each file
+# is read via several range requests
 BIG_LOCAL_SIZES = [
-    (f"big{i}.bin", size) for i, size in enumerate((1_500_000, 2_100_000, 3_000_000))
+    (f"big{i}.bin", size) for i, size in enumerate((6_500_000, 11_000_000, 16_500_000))
 ]
 
 
 @pytest.fixture(scope="session")
 def big_served_files(tmp_path_factory):
-    """Serve a handful of deterministic >1 MiB files over a local HTTP server.
+    """Serve a handful of deterministic multi-block files over local HTTP.
 
     Mirrors ``served_files`` but with content large enough to exercise
-    multi-block reads through the FUSE mount without depending on the
-    public network.
+    multi-block (range) reads through the FUSE mount without depending on
+    the public network.
     """
     workdir = tmp_path_factory.mktemp("big_served_files")
     rng = random.Random(0xDA7A1AD)
     for path, size in BIG_LOCAL_SIZES:
         (workdir / path).write_bytes(rng.randbytes(size))
-    with local_server(workdir) as url:
+    with local_server(workdir, RangeHTTPRequestHandler) as url:
         files = []
         for path, _ in BIG_LOCAL_SIZES:
             content = (workdir / path).read_bytes()
