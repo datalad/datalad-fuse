@@ -278,12 +278,15 @@ def test_callbacks_map_paths(tmp_path, transparent):
     assert getattr(fs.access, "libfuse_ignore", False)
 
 
-def test_parallel_access(tmp_path, big_url_dataset):
+def test_parallel_access(tmp_path, big_url_dataset, request):
     ds, data_files = big_url_dataset
+    # Remote hosts may hiccup, but locally served files must read right away
+    remote = request.node.callspec.params["big_url_dataset"] == "remote"
+    attempts = 3 if remote else 1
     with fusing(ds.path, tmp_path) as mount:
         with ThreadPoolExecutor() as pool:
             futures = {
-                pool.submit(sha256_file_with_retry, mount / path): dgst
+                pool.submit(sha256_file_with_retry, mount / path, attempts): dgst
                 for path, dgst in data_files.items()
             }
             for fut in as_completed(futures.keys()):
