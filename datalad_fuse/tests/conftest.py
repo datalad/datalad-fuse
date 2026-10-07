@@ -149,8 +149,13 @@ def serve_path_via_http(hostname, path, queue, handler):
 @contextmanager
 def local_server(directory, handler=SimpleHTTPRequestHandler):
     hostname = "127.0.0.1"
-    queue = multiprocessing.Queue()
-    p = multiprocessing.Process(
+    # Not "fork", the default on Linux before Python 3.14: a forked server
+    # inherits our pipes to batched git-annex processes, which then never see
+    # EOF when closed (e.g., on garbage collection of an AnnexRepo), hanging
+    # the test session
+    mp = multiprocessing.get_context("forkserver")
+    queue = mp.Queue()
+    p = mp.Process(
         target=serve_path_via_http, args=(hostname, directory, queue, handler)
     )
     p.start()
