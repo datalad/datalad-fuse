@@ -303,14 +303,11 @@ def sha256_file(path):
 
 def sha256_file_with_retry(path, attempts=3, delay=1.0):
     # Absorb transient FUSE-callback errors (e.g. from an exhausted
-    # aiohttp-retry chain on the remote big-file variant).
-    last_exc = None
-    for i in range(attempts):
+    # aiohttp-retry chain on the remote big-file variant); the last attempt
+    # raises.
+    for _ in range(attempts - 1):
         try:
             return sha256_file(path)
-        except OSError as e:
-            last_exc = e
-            if i < attempts - 1:
-                time.sleep(delay)
-    assert last_exc is not None
-    raise last_exc
+        except OSError:  # pragma: no cover  # only on remote hiccups
+            time.sleep(delay)
+    return sha256_file(path)

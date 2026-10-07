@@ -117,7 +117,8 @@ def tmp_home(monkeypatch, tmp_path_factory):
 class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
     """SimpleHTTPRequestHandler which also serves ``Range: bytes=N-[M]``"""
 
-    def send_head(self):
+    # Runs in the server process, where coverage is not measured
+    def send_head(self):  # pragma: no cover
         m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
         path = self.translate_path(self.path)
         if m is None or not os.path.isfile(path):
@@ -139,7 +140,8 @@ class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
         return io.BytesIO(data)
 
 
-def serve_path_via_http(hostname, path, queue, handler):
+# Runs in the server process, where coverage is not measured
+def serve_path_via_http(hostname, path, queue, handler):  # pragma: no cover
     os.chdir(path)
     httpd = HTTPServer((hostname, 0), handler)
     queue.put(httpd.server_port)
