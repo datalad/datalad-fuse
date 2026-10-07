@@ -1,6 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
+from errno import ENOENT
 import hashlib
+import inspect
+import os
 import os.path
 from pathlib import Path
 import subprocess
@@ -240,6 +243,39 @@ def test_fuse_git_status(tmp_path):
             universal_newlines=True,
         )
         assert r.stdout == ""
+
+
+@pytest.mark.parametrize("transparent", [False, True])
+def test_callbacks_map_paths(tmp_path, transparent):
+    # In-process check (no mount) that callbacks, as mfusepy invokes them,
+    # get the FUSE path mapped into the dataset and .git hidden as needed.
+    from mfusepy import FuseOSError
+
+    from datalad_fuse.fuse_ import DataLadFUSE
+
+    ds = Dataset(tmp_path / "ds").create(cfg_proc="text2git")
+    (tmp_path / "ds" / "text.txt").write_text("text\n")
+    ds.save(message="Create text file")
+    fs = DataLadFUSE(ds.path, caching=False, mode_transparent=transparent)
+    assert "text.txt" in fs.readdir("/", 0)
+    assert fs.getattr("/text.txt")["st_size"] == 5
+    fh = fs.open("/text.txt", os.O_RDONLY)
+    try:
+        assert fs.read("/text.txt", 100, 0, fh) == b"text\n"
+    finally:
+        fs.release("/text.txt", fh)
+    if transparent:
+        assert ".git" in fs.readdir("/", 0)
+        assert fs.getattr("/.git/HEAD")["st_size"] > 0
+    else:
+        assert ".git" not in fs.readdir("/", 0)
+        with pytest.raises(FuseOSError) as excinfo:
+            fs.getattr("/.git/HEAD")
+        assert excinfo.value.errno == ENOENT
+    # mfusepy passes `flags` to create() unless it takes just (path, mode)
+    assert list(inspect.signature(fs.create).parameters) == ["path", "mode"]
+    # callbacks we do not implement are left to libfuse
+    assert getattr(fs.access, "libfuse_ignore", False)
 
 
 def test_parallel_access(tmp_path, big_url_dataset):

@@ -94,7 +94,9 @@ class FuseFS(Interface):
             args=("--caching",),
             choices=["none", "ondisk"],
             default="none",
-            doc="Whether to cache fsspec'ed files on disk on not at all",
+            doc="""Whether to keep the data fetched from remote URLs in an
+            on-disk cache ('ondisk'), or only in memory while a file is open
+            ('none', the default).""",
         ),
         # TODO: (might better become config vars?)
         # --cache=persist
@@ -113,7 +115,7 @@ class FuseFS(Interface):
         allow_other: bool = False,
         caching: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
-        from fuse import FUSE
+        from mfusepy import FUSE
 
         from .fuse_ import DataLadFUSE
 

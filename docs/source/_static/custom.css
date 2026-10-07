@@ -1,0 +1,29 @@
+/* Let table cells wrap instead of overflowing the content column */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
+
+/* Let long inline code break, e.g. on narrow (phone) screens */
+code.literal,
+code.literal span.pre {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* On narrow screens, stack field lists (parameters etc. in the API
+   reference), and let long titles, signatures and index tables wrap */
+@media screen and (max-width: 768px) {
+    html.writer-html5 .rst-content dl.field-list {
+        display: block;
+    }
+    html.writer-html5 .rst-content dl.field-list > dd {
+        margin-left: 1em;
+    }
+    .rst-content h1,
+    .rst-content dt.sig,
+    .rst-content table.autosummary td,
+    .rst-content table.indextable td {
+        overflow-wrap: anywhere;
+    }
+}

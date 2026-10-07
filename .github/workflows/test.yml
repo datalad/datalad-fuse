@@ -19,6 +19,7 @@ jobs:
       #   nonetwork — --no-network --no-forgejo (the CI default)
       #   full      — --libfuse (FUSE tests; network+forgejo enabled)
       #   libfuse   — --libfuse only
+      # fuse3: true runs against libfuse 3 instead of libfuse 2.
       matrix:
         include:
           - python-version: '3.10'
@@ -31,6 +32,7 @@ jobs:
             full: true
           - python-version: '3.14'
             libfuse: true
+            fuse3: true
     runs-on: ubuntu-22.04
     steps:
     - name: Set up system
@@ -44,10 +46,10 @@ jobs:
         sudo eatmydata apt-get install git-annex-standalone
     - name: Install libfuse (full and libfuse jobs)
       if: matrix.full || matrix.libfuse
-      run: sudo eatmydata apt-get install -y fuse
-    - uses: actions/checkout@v6
+      run: sudo eatmydata apt-get install -y ${{ matrix.fuse3 && 'fuse3' || 'fuse' }}
+    - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
@@ -56,6 +58,8 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install coverage datalad tox tox-gh-actions
     - name: Run tests
+      env:
+        FUSE_LIBRARY_NAME: ${{ matrix.fuse3 && 'fuse3' || '' }}
       run: |
         # give detailed info on actual test setup
         datalad wtf
@@ -69,8 +73,8 @@ jobs:
         fi
         coverage xml
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
-        name: py${{ matrix.python-version }}${{ matrix.full && '-full' || '' }}${{ matrix.libfuse && '-libfuse' || '' }}
+        name: py${{ matrix.python-version }}${{ matrix.full && '-full' || '' }}${{ matrix.libfuse && '-libfuse' || '' }}${{ matrix.fuse3 && '-fuse3' || '' }}

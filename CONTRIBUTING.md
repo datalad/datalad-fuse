@@ -1,5 +1,22 @@
 # Contributing to DataLad FUSE
 
+## Documentation
+
+The documentation at https://datalad-fuse.readthedocs.io is built with
+[Sphinx](https://www.sphinx-doc.org) from `docs/source/`; the API reference
+is generated from the docstrings, and the command line reference from the
+commands' parameter definitions.  To build it locally:
+
+```bash
+pip install -e . -r docs/requirements.txt
+make -C docs html
+# then open docs/build/html/index.html
+```
+
+Warnings are treated as errors.  The documentation is also built for every
+pull request, both by the `docs` GitHub workflow and by Read the Docs, which
+links a preview of the rendered documentation from the pull request's checks.
+
 ## Running Tests
 
 ### Basic tests
@@ -10,7 +27,9 @@ tox -e py3
 
 ### FUSE mount tests
 
-Requires FUSE system libraries (`apt-get install fuse` on Debian/Ubuntu):
+Requires FUSE system libraries (`apt-get install fuse3` on Debian/Ubuntu).
+If libfuse 2 is installed as well, it is used unless `FUSE_LIBRARY_NAME=fuse3`
+is set:
 
 ```bash
 tox -e py3 -- --libfuse
