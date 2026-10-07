@@ -38,8 +38,8 @@ along with it:
 
    $ python3 -m pip install datalad-fuse
 
-To install the development version, which may include features that are not
-released yet:
+This documentation describes the development version, which may include
+features that are not released yet.  To install it:
 
 .. code-block:: console
 
@@ -49,20 +49,12 @@ released yet:
 Checking the installation
 =========================
 
-``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  Check
-that DataLad finds them and that git-annex is available:
+``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  These
+commands should print their help, and the version of git-annex and of
+``datalad-fuse``:
 
 .. code-block:: console
 
    $ datalad fusefs --help
-   Usage: datalad fusefs [-h] [-d DATASET] [-f] [--mode-transparent]
-   ...
    $ git annex version
-   git-annex version: 10.20260901
-   ...
-
-and that the Python package can be imported:
-
-.. code-block:: console
-
    $ python3 -c "import datalad_fuse; print(datalad_fuse.__version__)"

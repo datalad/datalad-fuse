@@ -33,6 +33,7 @@ Opening files: ``datalad_fuse.fsspec``
 .. autoclass:: FileState
    :members:
    :undoc-members:
+   :show-inheritance:
 
 
 git-annex helpers: ``datalad_fuse.utils``
@@ -55,3 +56,4 @@ FUSE file system: ``datalad_fuse.fuse_``
 
 .. autoclass:: DataLadFUSE
    :no-members:
+   :show-inheritance:

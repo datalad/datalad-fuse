@@ -62,8 +62,8 @@ class DatasetAdapter:
     caching : bool
         If true, keep the data fetched from remote URLs in a sparse on-disk
         cache under ``<path>/.git/datalad/cache/fsspec/``, to be reused by
-        subsequent reads (for up to a week).  If false, data are only
-        buffered in memory while a file is open.
+        subsequent reads (for a week after they were first cached).  If false,
+        data are only buffered in memory while a file is open.
     mode_transparent : bool
         If true, paths of key files under ``.git/annex/objects/`` (the targets
         of annexed symlinks) are opened as annexed content, fetched from a

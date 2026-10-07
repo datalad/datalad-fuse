@@ -63,33 +63,28 @@ is not of specified type)`` or ``OSError: Can't synchronously read data
 The data are read lazily, after the file was already closed.  Read the data
 while the file is open, inside the ``with`` blocks (see :doc:`python`).
 
-``AttributeError: 'NoneType' object has no attribute 'get_commit_date'``
-------------------------------------------------------------------------
+Errors about paths
+------------------
 
-The path given to `~datalad_fuse.fsspec.DatasetAdapter` is not a dataset (or
-git repository).  Check the path, and the current directory if the path is
-relative.
+- ``AttributeError: 'NoneType' object has no attribute 'get_commit_date'``:
+  the path given to `~datalad_fuse.fsspec.DatasetAdapter` is not a dataset.
+  Check the path, and the current directory if the path is relative.
+- ``FileNotFoundError`` from ``DatasetAdapter.open()`` or ``datalad
+  fsspec-head``: paths of files are relative to the top directory of the
+  dataset, not to the current directory, so use ``sub-01/file.nwb`` rather
+  than ``dataset/sub-01/file.nwb`` or ``file.nwb``.
+- ``ValueError`` "Path not under root dataset" or "is not in the subpath of"
+  from `~datalad_fuse.fsspec.FsspecAdapter`: use an absolute ``root`` and
+  absolute paths (see :doc:`python`).
 
-``FileNotFoundError`` with ``DatasetAdapter.open()`` or ``datalad fsspec-head``
--------------------------------------------------------------------------------
-
-Paths of files are relative to the top directory of the dataset, not to the
-current directory: use ``sub-01/file.nwb`` rather than
-``dataset/sub-01/file.nwb`` or ``file.nwb``.
-
-Reading a file in the mount fails with an odd error
----------------------------------------------------
+Reading a file in the mount fails with "Invalid argument"
+---------------------------------------------------------
 
 When the content of a file cannot be fetched, programs reading it from the
-mount report a generic error such as "Input/output error", or even
-"Numerical result out of range".  Run ``datalad fsspec-head`` on the same file
-to see the actual problem, or mount with ``datalad -l debug fusefs ...`` to
-see the URLs that are tried.
-
-"fusefs does not work properly without --foreground"
-----------------------------------------------------
-
-Add ``--foreground`` (``-f``), which is currently required; see :doc:`cli`.
+mount only report a generic error such as "Invalid argument".  The actual
+error, e.g. "Could not find a usable URL ...", is printed by ``datalad
+fusefs``.  ``datalad fsspec-head`` on the same file reports it directly, and
+``datalad -l debug fusefs ...`` shows the URLs that are tried.
 
 "Unable to find libfuse" or "fuse: device not found"
 ----------------------------------------------------
@@ -99,11 +94,6 @@ FUSE is not installed, or not available.  Install it (see
 FUSE device, e.g. with Docker::
 
    docker run --device /dev/fuse --cap-add SYS_ADMIN ...
-
-"fuse: mountpoint is not empty"
--------------------------------
-
-Mount on an empty directory.
 
 "Device or resource busy" when unmounting
 -----------------------------------------
@@ -128,14 +118,8 @@ killed.  Unmount the stale mount point, then mount again:
 
    $ fusermount -u mnt
 
-"option allow_other only allowed if 'user_allow_other' is set in /etc/fuse.conf"
---------------------------------------------------------------------------------
-
-``--allow-other`` requires the system administrator to add the line
-``user_allow_other`` to ``/etc/fuse.conf``.
-
-"Invalid argument" for every file in the mount
-----------------------------------------------
+"Invalid argument" for remote files in the mount
+------------------------------------------------
 
 If the path of the dataset given to ``datalad fusefs`` contains a symbolic
 link, files whose content is not present cannot be read.  Give the real path
@@ -148,12 +132,6 @@ A subdataset's directory is empty
 The subdataset is not installed.  Install it (without content) with ``datalad
 get -n path/to/subdataset``, and remount if you are using a FUSE mount.
 
-``ValueError`` "Path not under root dataset" or "is not in the subpath of"
---------------------------------------------------------------------------
-
-A path passed to `~datalad_fuse.fsspec.FsspecAdapter` was relative.  Use an
-absolute ``root`` and absolute paths (see :doc:`python`).
-
 Changes to the dataset are not reflected
 ----------------------------------------
 
@@ -165,14 +143,9 @@ dataset, create a new adapter or remount.
 Reading is slow
 ---------------
 
-- The first access to a remote file takes a moment, to query git-annex and to
-  connect to the server.
-- Data are fetched in blocks of 5 MiB, so reading many small, scattered
-  pieces of a file is slow.
-- Reading entire files, or decompressing them, fetches everything, and is
-  faster with ``datalad get``.
-- Use ``--caching ondisk`` (``caching=True`` in Python) if the same files are
-  read repeatedly.
+Reading many small, scattered pieces of a file, or entire files, is slow, as
+data are fetched in blocks of 5 MiB (see :doc:`concepts`).  Use ``datalad
+get`` for entire files, and caching for files that are read repeatedly.
 
 Warnings "Retrying request to ..."
 ----------------------------------
@@ -185,6 +158,8 @@ Warning "Destroying fsspecs and collection of N fhs"
 
 Printed by ``datalad fusefs`` when it unmounts; it is harmless.
 
+
+.. _limitations:
 
 Known limitations
 =================

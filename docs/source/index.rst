@@ -33,31 +33,14 @@ get`` is usually faster, and keeps the files for later.
 
 There are two ways to use it:
 
-.. list-table::
-   :header-rows: 1
-   :stub-columns: 1
-   :widths: 16 42 42
+- **A FUSE mount** (``datalad fusefs``, Linux with FUSE): the dataset appears
+  as a read-only directory tree, so any program can open its files by name:
+  ``h5ls``, MATLAB, FSL, ``nwbinspector``, shell tools, ...
+- **From Python** (``DatasetAdapter``, ``FsspecAdapter``; no FUSE needed): you
+  get Python file objects, which libraries such as h5py, PyNWB or pandas can
+  read from.
 
-   * -
-     - FUSE mount
-     - Python
-   * - What
-     - ``datalad fusefs`` presents a dataset as a read-only directory tree in
-       which annexed files can be opened like local files.
-     - ``FsspecAdapter`` and ``DatasetAdapter`` return Python file objects
-       for files of a dataset.
-   * - Works with
-     - Any program: ``h5ls``, MATLAB, ``nwbinspector``, shell tools, ...
-     - Python libraries that accept file objects: h5py, pynwb, pandas,
-       json, ...
-   * - Needs
-     - Linux with FUSE installed
-     - Just Python (nothing to install beyond ``datalad-fuse``)
-
-Use Python if the library you read files with accepts Python file objects
-(h5py, PyNWB, pandas, ...); use the FUSE mount for tools that need a file
-name: MATLAB, FSL, command-line tools, or Python functions that only accept
-paths.
+Both need git-annex (see :doc:`installation`).
 
 
 A quick look
@@ -104,7 +87,7 @@ Or open files directly from Python:
 
    from datalad_fuse.fsspec import DatasetAdapter
 
-   # caching=False: keep fetched data in memory only (see "Caching")
+   # caching=False: keep fetched data in memory only
    with closing(DatasetAdapter("000582", caching=False)) as dsa:
        with dsa.open("sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb") as f:
            with h5py.File(f, "r") as h5, pynwb.NWBHDF5IO(file=h5) as io:
@@ -115,14 +98,14 @@ The :doc:`tutorial` walks through both in more detail.
 
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Getting started
 
    installation
    tutorial
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: User guide
 
    concepts
@@ -131,7 +114,7 @@ The :doc:`tutorial` walks through both in more detail.
    troubleshooting
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Reference
 
    api
@@ -143,11 +126,3 @@ The :doc:`tutorial` walks through both in more detail.
    :caption: Development
 
    contributing
-
-
-Indices
-=======
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
