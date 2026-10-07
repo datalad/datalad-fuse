@@ -34,6 +34,8 @@ jobs:
             libfuse: true
             fuse3: true
     runs-on: ubuntu-22.04
+    # jobs take < 10 minutes; do not let a hung test hold a runner for 6 hours
+    timeout-minutes: 30
     steps:
     - name: Set up system
       shell: bash
