@@ -26,12 +26,16 @@ jobs:
           - python-version: '3.11'
           - python-version: '3.12'
           - python-version: '3.13'
+          - python-version: '3.13'
+            libfuse: true
           - python-version: '3.14'
             full: true
           - python-version: '3.14'
             libfuse: true
             fuse3: true
     runs-on: ubuntu-22.04
+    # jobs take < 10 minutes; do not let a hung test hold a runner for 6 hours
+    timeout-minutes: 30
     steps:
     - name: Set up system
       shell: bash
@@ -61,10 +65,11 @@ jobs:
       run: |
         # give detailed info on actual test setup
         datalad wtf
+        pyver="py$(echo '${{ matrix.python-version }}' | tr -d .)"
         if [ "${{ matrix.full }}" = "true" ]; then
-          tox -e py314-full
+          tox -e "${pyver}-full"
         elif [ "${{ matrix.libfuse }}" = "true" ]; then
-          tox -e py314-libfuse
+          tox -e "${pyver}-libfuse"
         else
           tox
         fi

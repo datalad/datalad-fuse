@@ -1,11 +1,14 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+import io
 import logging
 import multiprocessing
 import os
 import os.path
 from pathlib import Path
+import random
 import re
 import time
 from typing import List
@@ -111,19 +114,51 @@ def tmp_home(monkeypatch, tmp_path_factory):
     return home
 
 
-def serve_path_via_http(hostname, path, queue):
+class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler which also serves ``Range: bytes=N-[M]``"""
+
+    # Runs in the server process, where coverage is not measured
+    def send_head(self):  # pragma: no cover
+        m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+        path = self.translate_path(self.path)
+        if m is None or not os.path.isfile(path):
+            return super().send_head()
+        with open(path, "rb") as f:
+            size = os.fstat(f.fileno()).st_size
+            start = int(m[1])
+            end = min(int(m[2]), size - 1) if m[2] else size - 1
+            if start > end:
+                self.send_error(416)
+                return None
+            f.seek(start)
+            data = f.read(end - start + 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        return io.BytesIO(data)
+
+
+# Runs in the server process, where coverage is not measured
+def serve_path_via_http(hostname, path, queue, handler):  # pragma: no cover
     os.chdir(path)
-    httpd = HTTPServer((hostname, 0), SimpleHTTPRequestHandler)
+    httpd = HTTPServer((hostname, 0), handler)
     queue.put(httpd.server_port)
     httpd.serve_forever()
 
 
 @contextmanager
-def local_server(directory):
+def local_server(directory, handler=SimpleHTTPRequestHandler):
     hostname = "127.0.0.1"
-    queue = multiprocessing.Queue()
-    p = multiprocessing.Process(
-        target=serve_path_via_http, args=(hostname, directory, queue)
+    # Not "fork", the default on Linux before Python 3.14: a forked server
+    # inherits our pipes to batched git-annex processes, which then never see
+    # EOF when closed (e.g., on garbage collection of an AnnexRepo), hanging
+    # the test session
+    mp = multiprocessing.get_context("forkserver")
+    queue = mp.Queue()
+    p = mp.Process(
+        target=serve_path_via_http, args=(hostname, directory, queue, handler)
     )
     p.start()
     try:
@@ -216,10 +251,60 @@ def superdataset(served_files, request, tmp_home, tmp_path_factory):  # noqa: U1
     return (ds, {os.path.join("sub", df.path): df.content for df in served_files})
 
 
-@pytest.fixture
-def big_url_dataset(tmp_home, tmp_path_factory):  # noqa: U100
+# Larger than the 5 MiB block size of fsspec's HTTP files, so that each file
+# is read via several range requests
+BIG_LOCAL_SIZES = [
+    (f"big{i}.bin", size) for i, size in enumerate((6_500_000, 11_000_000, 16_500_000))
+]
+
+
+@pytest.fixture(scope="session")
+def big_served_files(tmp_path_factory):
+    """Serve a handful of deterministic multi-block files over local HTTP.
+
+    Mirrors ``served_files`` but with content large enough to exercise
+    multi-block (range) reads through the FUSE mount without depending on
+    the public network.
+    """
+    workdir = tmp_path_factory.mktemp("big_served_files")
+    rng = random.Random(0xDA7A1AD)
+    for path, size in BIG_LOCAL_SIZES:
+        (workdir / path).write_bytes(rng.randbytes(size))
+    with local_server(workdir, RangeHTTPRequestHandler) as url:
+        files = []
+        for path, _ in BIG_LOCAL_SIZES:
+            content = (workdir / path).read_bytes()
+            files.append(
+                DataFile(
+                    url=f"{url}/{path}",
+                    path=path,
+                    content=content,
+                )
+            )
+        yield files
+
+
+@pytest.fixture(
+    params=[
+        "local",
+        pytest.param("remote", marks=pytest.mark.network),
+    ]
+)
+def big_url_dataset(
+    request,
+    tmp_home,  # noqa: U100
+    tmp_path_factory,
+    big_served_files,
+):
     workpath = tmp_path_factory.mktemp("big_url_dataset")
     ds = Dataset(workpath / "ds").create()
-    for path, url, _ in BIG_URLS:
+    if request.param == "remote":
+        entries = [(path, url, digest) for path, url, digest in BIG_URLS]
+    else:
+        entries = [
+            (dfile.path, dfile.url, hashlib.sha256(dfile.content).hexdigest())
+            for dfile in big_served_files
+        ]
+    for path, url, _ in entries:
         ds.repo.add_url_to_file(path, url, options=["--relaxed"])
-    yield (ds, {path: digest for path, _, digest in BIG_URLS})
+    yield (ds, {path: digest for path, _, digest in entries})
