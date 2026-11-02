@@ -22,7 +22,6 @@ from urllib.parse import urlparse
 import uuid as uuid_mod
 
 from datalad.api import Dataset
-from datalad.support.exceptions import CommandError
 import pytest
 import requests
 
@@ -448,12 +447,9 @@ def forgejo_repo(
             # git-annex records remote.forgejo.annex-uuid.  Any git-annex
             # command that loads the remote list does that; `git annex init`
             # no longer does in an initialised repository since 10.20261026.
-            # Until the UUID is known, `info` fails to resolve the remote,
-            # so try again on the next iteration.
-            try:
-                ds.repo.call_git(["annex", "info", "--fast", "forgejo"])
-            except CommandError as e:
-                lgr.info("iter %d: git annex info forgejo failed: %s", iter, e)
+            # Until the UUID is known, `info` fails to resolve the remote, so
+            # ignore its exit status and try again on the next iteration.
+            ds.repo.call_git_success(["annex", "info", "--fast", "forgejo"])
             ds.config.reload()
             for cfg in "annex-ignore", "annex-ignore-auto":
                 cfg_ = f"remote.forgejo.{cfg}"
