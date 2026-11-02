@@ -208,6 +208,11 @@ class DatasetAdapter:
         If true, paths of key files under ``.git/annex/objects/`` (the targets
         of annexed symlinks) are opened as annexed content, fetched from a
         remote URL if not present locally.
+    init_annex : bool
+        If false and git-annex is not initialized in the dataset (e.g., in a
+        fresh ``git clone``), do not run any ``git annex`` command, which would
+        initialize it (modifying the repository): annexed files without local
+        content then cannot be opened (see :attr:`annex_initialized`).
     backends : str, optional
         Comma-separated, priority-ordered backends to try, e.g.
         ``"remfile,fsspec"``.  Defaults to the ``datalad.fusefs.backends``
@@ -220,19 +225,37 @@ class DatasetAdapter:
     the ``git annex`` processes started for the dataset.
     """
 
+    #: Whether ``git annex`` commands are not run, git-annex not being
+    #: initialized in the dataset and ``init_annex`` false
+    annex_disabled = False
+
     def __init__(
         self,
         path: str | Path,
         caching: bool,
         mode_transparent: bool = False,
+        init_annex: bool = True,
         backends: Optional[str] = None,
     ) -> None:
         self.path = Path(path)
         self.mode_transparent = mode_transparent
         ds = Dataset(path)
         self.annex: Optional[AnnexRepo]
+        #: Whether git-annex is initialized in the dataset (it is not after a
+        #: plain ``git clone``)
+        self.annex_initialized = False
         if isinstance(ds.repo, AnnexRepo):
-            self.annex = ds.repo
+            self.annex_initialized = bool(ds.repo.config.get("annex.uuid"))
+            if self.annex_initialized or init_annex:
+                self.annex = ds.repo
+            else:
+                lgr.debug(
+                    "%s: git-annex not initialized and we were instructed not"
+                    " to initialize; will error out if reading annexed content",
+                    path,
+                )
+                self.annex = None
+                self.annex_disabled = True
         else:
             self.annex = None
         self.commit_dt = datetime.fromtimestamp(
@@ -607,6 +630,11 @@ class DatasetAdapter:
                 "has" if fstate is FileState.HAS_CONTENT else "does not have",
             )
         if fstate is FileState.NO_CONTENT:
+            if self.annex_disabled:
+                raise IOError(
+                    f"Cannot read content of {relpath} within {self.path}:"
+                    " git-annex is not initialized"
+                )
             # Primary URLs from git-annex whereis / remote paths, then S3
             # exporttree fallback URLs (legacy openneuro datasets that lack
             # proper versioned URLs in annex metadata).  Lazy, so the whereis /
@@ -693,6 +721,8 @@ class RemoteFilesystemAdapter:
         Passed to each :class:`DatasetAdapter`.
     mode_transparent : bool
         Passed to each :class:`DatasetAdapter`.
+    init_annex : bool
+        Passed to each :class:`DatasetAdapter`.
     backends : str, optional
         Passed to each :class:`DatasetAdapter`.
 
@@ -707,11 +737,13 @@ class RemoteFilesystemAdapter:
         root: str | Path,
         caching: bool,
         mode_transparent: bool = False,
+        init_annex: bool = True,
         backends: Optional[str] = None,
     ) -> None:
         self.root = Path(root)
         self.mode_transparent = mode_transparent
         self.caching = caching
+        self.init_annex = init_annex
         self.backends = backends
         self.datasets: dict[Path, DatasetAdapter] = {}
 
@@ -762,6 +794,7 @@ class RemoteFilesystemAdapter:
                 dspath,
                 mode_transparent=self.mode_transparent,
                 caching=self.caching,
+                init_annex=self.init_annex,
                 backends=self.backends,
             )
         relpath = str(Path(filepath).relative_to(dspath))

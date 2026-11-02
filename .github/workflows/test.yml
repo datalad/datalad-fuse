@@ -49,6 +49,11 @@ jobs:
     - name: Install libfuse (full and libfuse jobs)
       if: matrix.full || matrix.libfuse
       run: sudo eatmydata apt-get install -y ${{ matrix.fuse3 && 'fuse3' || 'fuse' }}
+    - name: Show container runtimes (Forgejo tests run in full and libfuse jobs)
+      if: matrix.full || matrix.libfuse
+      run: |
+        podman version || true
+        docker version || true
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v7
