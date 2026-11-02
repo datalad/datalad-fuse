@@ -33,13 +33,14 @@ Opening files: ``datalad_fuse.adapter``
 .. autoclass:: FileState
    :members:
    :undoc-members:
+   :show-inheritance:
 
 .. autofunction:: resolve_backends
 
 .. autofunction:: create_backends
 
 .. note::
-   Up to 0.6.0 these lived in ``datalad_fuse.fsspec``, and
+   Up to 0.7.0 these lived in ``datalad_fuse.fsspec``, and
    `RemoteFilesystemAdapter` was called ``FsspecAdapter``.  Importing
    ``FsspecAdapter``, ``DatasetAdapter``, ``FileState`` or ``is_http_url``
    from ``datalad_fuse.fsspec`` still works, with a
@@ -62,11 +63,13 @@ Backends do the actual reading of remote files; see :ref:`concepts-backends`.
 
 .. autoclass:: FsspecBackend
    :members: can_handle, open_url, clear
+   :show-inheritance:
 
 .. currentmodule:: datalad_fuse.remfile
 
 .. autoclass:: RemfileBackend
    :members: can_handle, open_url, clear
+   :show-inheritance:
 
 .. autoclass:: RemfileWrapper
    :members: read, seek, tell, info, close
@@ -92,3 +95,4 @@ FUSE file system: ``datalad_fuse.fuse_``
 
 .. autoclass:: DataLadFUSE
    :no-members:
+   :show-inheritance:

@@ -74,9 +74,6 @@ in order until one can be opened:
    versions cannot be listed, the file's current version is used, with a
    warning that it may not be the right one.
 
-   .. note::
-      This fallback is newer than the 0.6.0 release.
-
 If no backend can open any of the candidates, opening the file fails with
 ``Could not open <path> within <dataset> (backends=<backends>)``.
 
@@ -84,33 +81,14 @@ To see which URLs are tried, and by which backend, enable debug logging (see
 :ref:`troubleshooting-logging`).
 
 Requests answered with a server error (HTTP 5xx) are retried up to four
-times, waiting up to 36 seconds in between, and each retry logs a warning
-"Retrying request to ...".  A server that keeps failing can thus delay
-opening a file by a couple of minutes before the next URL is tried.
-Connection errors are not retried: the next candidate URL is tried right
-away.
+times, with delays of up to 36 seconds (each retry logs "Retrying request to
+..."); after a connection error, the next URL is tried right away.
 
-
-Access is anonymous
--------------------
-
-URLs are accessed without credentials, unless credentials are part of the URL
-itself (e.g. ``https://user:token@host/...``, as can be the case for git
-remotes).  DataLad's credential store, ``~/.netrc`` or AWS credentials are not
-consulted, so content that requires authentication (for example embargoed
-DANDI data or private repositories) cannot be read this way; use ``datalad
-get`` for it.
-
-HTTP proxies configured with the ``http_proxy``/``https_proxy`` environment
-variables are not used either, so where the internet can only be reached
-through a proxy, remote content cannot be read.
-
-Content is not verified
------------------------
-
-``datalad get`` and ``git annex get`` verify downloaded content against its
-key's checksum.  ``datalad-fuse`` reads parts of files and does not verify
-them, so it relies on the URLs serving the right content.
+URLs are accessed anonymously: credentials are only used if they are part of
+the URL itself (e.g. ``https://user:token@host/...`` for some git remotes),
+and HTTP proxies set with ``http_proxy``/``https_proxy`` are not used.  Unlike
+``datalad get``, ``datalad-fuse`` does not verify content against the
+checksum in its key.  See :ref:`limitations` for a summary.
 
 
 .. _concepts-backends:
@@ -176,7 +154,7 @@ back to the extension of the file's path for keys that carry none, such as
 the ``URL``/``VURL`` keys that ``git annex addurl --fast`` produces.
 
 .. note::
-   Backends are newer than the 0.6.0 release.  Up to 0.6.0, all files were
+   Backends are newer than the 0.7.0 release.  Up to 0.7.0, all files were
    read with fsspec, which remains the behaviour when remfile is not
    installed.
 
@@ -192,10 +170,9 @@ reading the metadata and a few arrays of a multi-gigabyte NWB/HDF5 file
 transfers only a small fraction of it.
 
 This works best for file formats designed for partial access, such as HDF5
-and NWB, and with tools that only read the parts they need.  Reading a whole
-file, e.g. to decompress a ``.nii.gz`` file or compute a checksum, transfers
-all of it, one request after the other; if you need entire files, ``datalad
-get`` is usually faster.
+and NWB, and with tools that only read the parts they need.  Reading whole
+files transfers all of them, one request after the other, and is usually
+faster with ``datalad get``.
 
 The first access to a remote file takes a little time, as git-annex has to be
 queried and a connection established; subsequent reads of the same open file
@@ -211,16 +188,16 @@ By default, fetched data are kept in memory, and only while a file is open.
 With caching enabled (``caching=True`` for the Python adapters, ``--caching
 ondisk`` for ``datalad fusefs`` and ``datalad fsspec-head``), the backends
 store what they fetch on disk and reuse it when the same file is read again,
-also in later sessions.  fsspec uses its `CachingFileSystem
+also in later sessions.  With fsspec's `CachingFileSystem
 <https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.implementations.cached.CachingFileSystem>`_,
-which keeps blocks for up to a week and fetches them again after that;
-remfile keeps its chunks without an expiry.
+a cached file expires a week after it was first cached, and its data are then
+fetched again; remfile keeps its chunks without an expiry.
 
 - The caches of a dataset are located inside it, under
   ``.git/datalad/cache/``, one directory per backend (``fsspec/`` and
   ``remfile/``), so each (sub)dataset has its own.
 - Files are cached *sparsely*: only the blocks or chunks that were read are
-  stored.
+  stored, so the cache takes less disk space than the files' sizes suggest.
 - The cache is separate from the git-annex object store: cached files do not
   count as present content for ``git annex`` or ``datalad``.
 - The cache does not shrink by itself.  Remove it with

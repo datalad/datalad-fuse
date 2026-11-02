@@ -1,3 +1,33 @@
+# 0.7.0 (Tue Oct 20 2026)
+
+#### 🚀 Enhancement
+
+- RF: switch from unmaintained fusepy to mfusepy [#139](https://github.com/datalad/datalad-fuse/pull/139) (yaroslav.o.halchenko@dartmouth.edu)
+- ENH: add S3 exporttree URL fallback for legacy annex exported OpenNeuro datasets [#133](https://github.com/datalad/datalad-fuse/pull/133) (yaroslav.o.halchenko@dartmouth.edu)
+
+#### 🐛 Bug Fix
+
+- BF+ENH(TST): stabilize test_parallel_access; add py313-libfuse CI job [#136](https://github.com/datalad/datalad-fuse/pull/136) (yaroslav.o.halchenko@dartmouth.edu)
+
+#### 🏠 Internal
+
+- [gh-actions](deps): Bump actions/setup-python from 6 to 7 [#137](https://github.com/datalad/datalad-fuse/pull/137) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- [gh-actions](deps): Bump codecov/codecov-action from 6 to 7 [#134](https://github.com/datalad/datalad-fuse/pull/134) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- [gh-actions](deps): Bump actions/checkout from 6 to 7 [#135](https://github.com/datalad/datalad-fuse/pull/135) ([@dependabot[bot]](https://github.com/dependabot[bot]))
+
+#### 📝 Documentation
+
+- DOC: trim docs, fix inaccuracies and rendering issues [#140](https://github.com/datalad/datalad-fuse/pull/140) (yaroslav.o.halchenko@dartmouth.edu [@claude](https://github.com/claude))
+- Add comprehensive documentation for datalad-fuse [#138](https://github.com/datalad/datalad-fuse/pull/138) (yaroslav.o.halchenko@dartmouth.edu)
+
+#### Authors: 3
+
+- [@dependabot[bot]](https://github.com/dependabot[bot])
+- Claude ([@claude](https://github.com/claude))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.6.0 (Wed May 06 2026)
 
 #### 🚀 Enhancement

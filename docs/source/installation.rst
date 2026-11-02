@@ -13,26 +13,15 @@ Requirements
   <https://handbook.datalad.org/en/latest/intro/installation.html>`_ covers
   more options.
 - **FUSE**, only for mounting datasets with ``datalad fusefs``.  The
-  `fusepy <https://github.com/fusepy/fusepy>`_ bindings used by
-  ``datalad-fuse`` need the FUSE 2 library (``libfuse.so.2``), plus the
-  ``fusermount`` helper, which FUSE 3 also provides.  Recent Debian and
-  Ubuntu releases come with FUSE 3 only; add the FUSE 2 library to it, keeping
-  FUSE 3 installed:
+  `mfusepy <https://github.com/mxmlnkn/mfusepy>`_ bindings used by
+  ``datalad-fuse`` work with the FUSE 3 or the FUSE 2 library, together with
+  its ``fusermount3`` or ``fusermount`` helper.  On Debian and Ubuntu::
 
-  - Debian 13 (trixie), Ubuntu 24.04 and newer::
+        sudo apt-get install fuse3
 
-        sudo apt-get install fuse3 libfuse2t64
-
-  - Debian 12 (bookworm), Ubuntu 22.04::
-
-        sudo apt-get install fuse3 libfuse2
-
-  - older releases::
-
-        sudo apt-get install fuse
-
-  On these releases, installing the ``fuse`` package instead would remove
-  ``fuse3``, and with it possibly other packages that depend on it.
+  (``sudo apt-get install fuse`` on releases without the ``fuse3`` package).
+  If both libraries are installed, FUSE 2 is used; set the environment
+  variable ``FUSE_LIBRARY_NAME=fuse3`` to use FUSE 3 instead.
 
   FUSE mounts are developed and tested on Linux.  Opening files from Python
   (see :doc:`python`) and ``datalad fsspec-head`` do not need FUSE at all.
@@ -49,8 +38,8 @@ along with it:
 
    $ python3 -m pip install datalad-fuse
 
-To install the development version, which may include features that are not
-released yet:
+This documentation describes the development version, which may include
+features that are not released yet.  To install it:
 
 .. code-block:: console
 
@@ -82,28 +71,20 @@ it by default from then on.  Without it, those files are read with fsspec, as
 before.
 
 .. note::
-   The optional backends are newer than the 0.6.0 release.
+   The optional backends are newer than the 0.7.0 release.
 
 
 Checking the installation
 =========================
 
-``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  Check
-that DataLad finds them and that git-annex is available:
+``datalad-fuse`` is a DataLad extension: it adds commands to DataLad.  These
+commands should print their help, and the version of git-annex and of
+``datalad-fuse``:
 
 .. code-block:: console
 
    $ datalad fusefs --help
-   Usage: datalad fusefs [-h] [-d DATASET] [-f] [--mode-transparent]
-   ...
    $ git annex version
-   git-annex version: 10.20260901
-   ...
-
-and that the Python package can be imported:
-
-.. code-block:: console
-
    $ python3 -c "import datalad_fuse; print(datalad_fuse.__version__)"
 
 To check whether the optional remfile backend is available:

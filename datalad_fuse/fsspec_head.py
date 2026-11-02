@@ -57,7 +57,9 @@ class FsspecHead(Interface):
             args=("--caching",),
             choices=["none", "ondisk"],
             default="none",
-            doc="Whether to cache data fetched from remote URLs on disk or not at all",
+            doc="""Whether to keep the data fetched from remote URLs in an
+            on-disk cache ('ondisk'), or only in memory while a file is open
+            ('none', the default).""",
         ),
         "path": Parameter(
             args=("path",),

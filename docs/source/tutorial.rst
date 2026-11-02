@@ -50,16 +50,13 @@ the DANDI API.  Clone the dandiset with DataLad (or plain ``git clone``):
 .. code-block:: console
 
    $ datalad clone https://github.com/dandisets/000582
-   [INFO] Attempting a clone into /home/me/000582
    ...
-   [INFO] access to 2 dataset siblings dandi-dandisets-dropbox, dandiapi not auto-enabled, enable with:
-   | 		datalad siblings -d "/home/me/000582" enable -s SIBLING
    install(ok): /home/me/000582 (dataset)
    $ du -sh 000582
    2.2M	000582
 
-You can ignore the ``[INFO]`` messages, including the suggestion to enable
-siblings: ``datalad-fuse`` does not need them.
+DataLad prints a few ``[INFO]`` messages while cloning, including a
+suggestion to enable siblings; ``datalad-fuse`` does not need any of that.
 
 The clone holds all file names but no annexed content, which would be
 1.86 GB.  Annexed files are symlinks that point to content which is not
@@ -68,7 +65,7 @@ there:
 .. code-block:: console
 
    $ ls -l 000582/sub-10073/
-   lrwxrwxrwx 1 me me 203 Oct  6 19:35 sub-10073_ses-17010302_behavior+ecephys.nwb -> ../.git/annex/objects/vq/Z5/SHA256E-s15657857--43b3....nwb/SHA256E-s15657857--43b3....nwb
+   ... sub-10073_ses-17010302_behavior+ecephys.nwb -> ../.git/annex/objects/vq/Z5/SHA256E-s15657857--43b3...
 
 ``git annex whereis`` shows where the content of a file can be found:
 
@@ -78,8 +75,8 @@ there:
    whereis sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb (1 copy)
      	00000000-0000-0000-0000-000000000001 -- web
    ...
-     web: https://api.dandiarchive.org/api/assets/2b9e441b-56bc-4be2-893e-0e02d22d239d/download/
-     web: https://dandiarchive.s3.amazonaws.com/blobs/26a/22c/26a22c31-09bc-43a4-9187-edc7394ed12c?versionId=__7hm7itizkF8RCsvO.Fidzi7Lqd1OMu
+     web: https://api.dandiarchive.org/api/assets/2b9e441b-.../download/
+     web: https://dandiarchive.s3.amazonaws.com/blobs/26a/22c/26a22c31-...?versionId=...
    ok
 
 The ``web:`` lines are the URLs that ``datalad-fuse`` will read the content
@@ -116,8 +113,7 @@ PyNWB, can read from:
 
    nwb_path = "sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb"
 
-   # caching=False: keep fetched data in memory only (see "Keep fetched data
-   # in a cache" below)
+   # caching=False: keep fetched data in memory only (see below)
    with closing(DatasetAdapter("000582", caching=False)) as dsa:
        with dsa.open(nwb_path) as f, h5py.File(f, "r") as h5:
            with pynwb.NWBHDF5IO(file=h5) as io:
@@ -146,36 +142,13 @@ PyNWB, can read from:
 Some things to note:
 
 - PyNWB and h5py read data lazily: ``position.data`` is not loaded until it is
-  sliced (``position.data[:, 0]``), and only the parts of the file needed for
-  that slice are fetched.  Read everything you need *before* the ``with``
-  blocks close the file; ``units_df``, ``ts`` and ``x`` above are in-memory
-  copies that remain usable afterwards.  Reading from ``position.data`` after
-  the file was closed fails with an error mentioning "identifier is not of
-  specified type".
-- ``closing()`` makes sure that the ``git annex`` processes started by the
-  adapter are stopped when you are done.
+  sliced, and only the parts of the file needed for that slice are fetched.
+  So read what you need *inside* the ``with`` blocks; ``units_df``, ``ts`` and
+  ``x`` are in-memory copies that remain usable afterwards.  For interactive
+  work, e.g. in Jupyter, see :ref:`python-interactive`.
 - No DANDI-specific code was needed: the file was found by its path in the
   dataset, and its URL came from git-annex.  The same code works for any
   dataset whose annexed content is reachable over HTTP(S).
-
-When exploring data interactively, e.g. in Jupyter, ``with`` blocks are
-impractical.  Open everything step by step instead, and close it in reverse
-order when you are done:
-
-.. code-block:: python
-
-   dsa = DatasetAdapter("000582", caching=True)
-   f = dsa.open(nwb_path)
-   h5 = h5py.File(f, "r")
-   io = pynwb.NWBHDF5IO(file=h5)
-   nwbfile = io.read()
-
-   # ... explore nwbfile in further cells ...
-
-   io.close()
-   h5.close()
-   f.close()
-   dsa.close()
 
 From here on, the analysis part of the DANDI tutorial (e.g. computing tuning
 curves with `pynapple <https://pynapple.org>`_) applies to ``nwbfile``
@@ -231,23 +204,8 @@ Python code can now use plain file names:
    with pynwb.NWBHDF5IO("mnt/sub-10073/sub-10073_ses-17010302_behavior+ecephys.nwb") as io:
        print(io.read().units.to_dataframe())
 
-When done, unmount the dataset, either by pressing :kbd:`Ctrl-C` in the
-terminal running ``datalad fusefs``, or with:
-
-.. code-block:: console
-
-   $ fusermount -u mnt
-
-``datalad fusefs`` then exits, printing:
-
-.. code-block:: text
-
-   [WARNING] Destroying fsspecs and collection of 1 fhs
-   fusefs(ok): mnt
-
-The warning is harmless (the number varies).  If unmounting fails with "Device or resource busy",
-a program still uses the mount (e.g. a shell whose current directory is in
-it); see :doc:`troubleshooting`.
+When done, unmount the dataset by pressing :kbd:`Ctrl-C` in the terminal
+running ``datalad fusefs``, or with ``fusermount -u mnt`` (see :doc:`cli`).
 
 
 Keep fetched data in a cache
@@ -255,8 +213,7 @@ Keep fetched data in a cache
 
 By default, fetched data are kept in memory only while a file is open, so
 opening the file again fetches the data again.  With caching enabled, they
-are stored in a cache on disk and reused, also across sessions (for up to a
-week):
+are stored on disk, inside the dataset, and reused in later sessions too:
 
 .. code-block:: python
 
@@ -267,24 +224,10 @@ or, for a mount:
 
 .. code-block:: console
 
-   $ datalad fusefs -d 000582 --foreground --caching ondisk mnt &
+   $ datalad fusefs -d 000582 --foreground --caching ondisk mnt
 
-The cache is kept inside the dataset, under ``.git/datalad/cache/``, one
-directory per backend, and holds only the parts of files that were read:
-
-.. code-block:: console
-
-   $ du -sh 000582/.git/datalad/cache/*
-   12M	000582/.git/datalad/cache/remfile
-
-Remove it when it is no longer needed:
-
-.. code-block:: console
-
-   $ datalad fsspec-cache-clear -d 000582
-   fsspec-cache-clear(ok): /home/me/000582 (dataset)
-
-See :ref:`caching` for more.
+Remove the cache with ``datalad fsspec-cache-clear -d 000582`` when it is no
+longer needed.  See :ref:`caching` for details.
 
 
 Pin the version of the data
@@ -300,13 +243,10 @@ of those versions of the files:
    $ git -C 000582 tag
    0.251111.2151
    $ git -C 000582 checkout 0.251111.2151
-   Note: switching to '0.251111.2151'.
 
-   You are in 'detached HEAD' state. ...
-
-The "detached HEAD" message is expected: you are looking at a past version
-rather than at a branch.  To return to the latest state of the dandiset,
-check out its main branch, which is called ``draft`` for dandisets:
+Git then reports a "detached HEAD": you are looking at a past version rather
+than at a branch.  To return to the latest state of the dandiset, check out
+its main branch, which is called ``draft`` for dandisets:
 
 .. code-block:: console
 

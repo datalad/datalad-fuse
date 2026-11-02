@@ -7,7 +7,7 @@ build:
   tools:
     python: "3.12"
   apt_packages:
-    # fusepy, imported to document the FUSE file system class, needs libfuse2
+    # mfusepy, imported to document the FUSE file system class, needs libfuse
     - libfuse2t64
   jobs:
     post_checkout:

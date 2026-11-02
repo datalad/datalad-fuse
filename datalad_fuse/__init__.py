@@ -94,7 +94,9 @@ class FuseFS(Interface):
             args=("--caching",),
             choices=["none", "ondisk"],
             default="none",
-            doc="Whether to cache data fetched from remote URLs on disk or not at all",
+            doc="""Whether to keep the data fetched from remote URLs in an
+            on-disk cache ('ondisk'), or only in memory while a file is open
+            ('none', the default).""",
         ),
         "backends": Parameter(
             args=("--backends",),
@@ -124,7 +126,7 @@ class FuseFS(Interface):
         caching: str | None = None,
         backends: str | None = None,
     ) -> Iterator[Dict[str, Any]]:
-        from fuse import FUSE
+        from mfusepy import FUSE
 
         from .fuse_ import DataLadFUSE
 

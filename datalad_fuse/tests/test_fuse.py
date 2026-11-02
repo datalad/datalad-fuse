@@ -1,9 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
+from errno import ENOENT
 import hashlib
+import inspect
+import os
 import os.path
 from pathlib import Path
 import subprocess
+import time
 from typing import Iterator, Union
 
 from datalad.api import Dataset
@@ -241,12 +245,48 @@ def test_fuse_git_status(tmp_path):
         assert r.stdout == ""
 
 
-def test_parallel_access(tmp_path, big_url_dataset):
+@pytest.mark.parametrize("transparent", [False, True])
+def test_callbacks_map_paths(tmp_path, transparent):
+    # In-process check (no mount) that callbacks, as mfusepy invokes them,
+    # get the FUSE path mapped into the dataset and .git hidden as needed.
+    from mfusepy import FuseOSError
+
+    from datalad_fuse.fuse_ import DataLadFUSE
+
+    ds = Dataset(tmp_path / "ds").create(cfg_proc="text2git")
+    (tmp_path / "ds" / "text.txt").write_text("text\n")
+    ds.save(message="Create text file")
+    fs = DataLadFUSE(ds.path, caching=False, mode_transparent=transparent)
+    assert "text.txt" in fs.readdir("/", 0)
+    assert fs.getattr("/text.txt")["st_size"] == 5
+    fh = fs.open("/text.txt", os.O_RDONLY)
+    try:
+        assert fs.read("/text.txt", 100, 0, fh) == b"text\n"
+    finally:
+        fs.release("/text.txt", fh)
+    if transparent:
+        assert ".git" in fs.readdir("/", 0)
+        assert fs.getattr("/.git/HEAD")["st_size"] > 0
+    else:
+        assert ".git" not in fs.readdir("/", 0)
+        with pytest.raises(FuseOSError) as excinfo:
+            fs.getattr("/.git/HEAD")
+        assert excinfo.value.errno == ENOENT
+    # mfusepy passes `flags` to create() unless it takes just (path, mode)
+    assert list(inspect.signature(fs.create).parameters) == ["path", "mode"]
+    # callbacks we do not implement are left to libfuse
+    assert getattr(fs.access, "libfuse_ignore", False)
+
+
+def test_parallel_access(tmp_path, big_url_dataset, request):
     ds, data_files = big_url_dataset
+    # Remote hosts may hiccup, but locally served files must read right away
+    remote = request.node.callspec.params["big_url_dataset"] == "remote"
+    attempts = 3 if remote else 1
     with fusing(ds.path, tmp_path) as mount:
         with ThreadPoolExecutor() as pool:
             futures = {
-                pool.submit(sha256_file, mount / path): dgst
+                pool.submit(sha256_file_with_retry, mount / path, attempts): dgst
                 for path, dgst in data_files.items()
             }
             for fut in as_completed(futures.keys()):
@@ -259,3 +299,15 @@ def sha256_file(path):
         for chunk in iter(lambda: fp.read(65535), b""):
             dgst.update(chunk)
     return dgst.hexdigest()
+
+
+def sha256_file_with_retry(path, attempts=3, delay=1.0):
+    # Absorb transient FUSE-callback errors (e.g. from an exhausted
+    # aiohttp-retry chain on the remote big-file variant); the last attempt
+    # raises.
+    for _ in range(attempts - 1):
+        try:
+            return sha256_file(path)
+        except OSError:  # pragma: no cover  # only on remote hiccups
+            time.sleep(delay)
+    return sha256_file(path)
