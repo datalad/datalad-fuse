@@ -16,7 +16,7 @@ them.
 that git-annex has recorded for a file and fetches only the parts of the file
 that are actually read, with
 `fsspec <https://filesystem-spec.readthedocs.io>`_ or, for NWB/HDF5 files and
-if installed, `remfile <https://github.com/flatironinstitute/remfile>`_ (see
+if installed, `remfile <https://github.com/magland/remfile>`_ (see
 :ref:`concepts-backends`).
 
 Is it a good fit?

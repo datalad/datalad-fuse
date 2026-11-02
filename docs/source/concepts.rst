@@ -121,7 +121,7 @@ to open one of its URLs wins:
      - Always, as a dependency of ``datalad-fuse``
 
 The default is ``remfile,fsspec``: NWB/HDF5 files go to `remfile
-<https://github.com/flatironinstitute/remfile>`_, which is written for the
+<https://github.com/magland/remfile>`_, which is written for the
 many small, scattered reads that HDF5 libraries make, and everything else
 goes to fsspec.  If remfile is not installed, it is skipped silently and
 fsspec handles everything, as before.

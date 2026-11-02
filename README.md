@@ -7,7 +7,7 @@ datasets and [git-annex](https://git-annex.branchable.com) repositories
 without downloading them first: only the parts of files that are actually
 read are fetched, from the URLs that git-annex knows, via
 [fsspec](https://filesystem-spec.readthedocs.io) or — for NWB/HDF5 files, if
-installed — [remfile](https://github.com/flatironinstitute/remfile).  Unlike
+installed — [remfile](https://github.com/magland/remfile).  Unlike
 `datalad get`, which downloads whole files before you can use them, this pays
 off when you need only parts of large files, e.g. a few arrays from NWB/HDF5
 files or the headers of many images.  Use it through a FUSE mount, so that

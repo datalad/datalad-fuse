@@ -25,7 +25,7 @@ the packages used to read and plot the data:
    $ python3 -m pip install "datalad-fuse[remfile]" h5py pynwb matplotlib
 
 The ``[remfile]`` extra pulls in `remfile
-<https://github.com/flatironinstitute/remfile>`_, which ``datalad-fuse`` then
+<https://github.com/magland/remfile>`_, which ``datalad-fuse`` then
 uses for NWB and other HDF5 files; it is written for the access pattern of
 HDF5 libraries and is noticeably faster for them (see
 :ref:`concepts-backends`).  Everything below works without it too, just more

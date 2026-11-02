@@ -53,7 +53,7 @@ Optional backends
 
 Remote files are read by a *backend* (see :ref:`concepts-backends`).  fsspec,
 which handles every kind of file, is always installed.  `remfile
-<https://github.com/flatironinstitute/remfile>`_, which is faster for
+<https://github.com/magland/remfile>`_, which is faster for
 NWB/HDF5 files, is optional:
 
 .. code-block:: console
