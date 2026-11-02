@@ -7,6 +7,7 @@ import os
 import os.path
 from pathlib import Path
 import subprocess
+import time
 from typing import Iterator, Union
 
 from datalad.api import Dataset
@@ -277,12 +278,15 @@ def test_callbacks_map_paths(tmp_path, transparent):
     assert getattr(fs.access, "libfuse_ignore", False)
 
 
-def test_parallel_access(tmp_path, big_url_dataset):
+def test_parallel_access(tmp_path, big_url_dataset, request):
     ds, data_files = big_url_dataset
+    # Remote hosts may hiccup, but locally served files must read right away
+    remote = request.node.callspec.params["big_url_dataset"] == "remote"
+    attempts = 3 if remote else 1
     with fusing(ds.path, tmp_path) as mount:
         with ThreadPoolExecutor() as pool:
             futures = {
-                pool.submit(sha256_file, mount / path): dgst
+                pool.submit(sha256_file_with_retry, mount / path, attempts): dgst
                 for path, dgst in data_files.items()
             }
             for fut in as_completed(futures.keys()):
@@ -295,3 +299,15 @@ def sha256_file(path):
         for chunk in iter(lambda: fp.read(65535), b""):
             dgst.update(chunk)
     return dgst.hexdigest()
+
+
+def sha256_file_with_retry(path, attempts=3, delay=1.0):
+    # Absorb transient FUSE-callback errors (e.g. from an exhausted
+    # aiohttp-retry chain on the remote big-file variant); the last attempt
+    # raises.
+    for _ in range(attempts - 1):
+        try:
+            return sha256_file(path)
+        except OSError:  # pragma: no cover  # only on remote hiccups
+            time.sleep(delay)
+    return sha256_file(path)
