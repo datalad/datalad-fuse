@@ -28,7 +28,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: 3.9
+          # ubuntu-latest (Ubuntu 26.04) provides no Python 3.9
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -52,7 +53,7 @@ jobs:
           git update-ref refs/bm/merge-target HEAD^1
 
       - name: Run benchmarks on newest code
-        run: asv run --show-stderr --python 3.9 HEAD^-1
+        run: asv run --show-stderr --python 3.12 HEAD^-1
 
       - name: Check out previous code
         run: |
@@ -62,7 +63,7 @@ jobs:
           cp /tmp/asv.conf.json asv.conf.json
 
       - name: Run benchmarks on previous code
-        run: asv run --show-stderr --python 3.9 HEAD^-1
+        run: asv run --show-stderr --python 3.12 HEAD^-1
 
       - name: Compare benchmarks on previous & newest code
         run: asv compare refs/bm/merge-target refs/bm/pr
