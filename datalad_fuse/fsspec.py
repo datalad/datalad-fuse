@@ -104,7 +104,7 @@ class DatasetAdapter:
                 self.annex = ds.repo
             else:
                 lgr.debug(
-                    "%s: git-annex not initialized; not reading annexed content", path
+                    "%s: git-annex not initialized and we were instructed not to initialize; will error out if reading annexed content", path
                 )
                 self.annex = None
                 self.annex_disabled = True
