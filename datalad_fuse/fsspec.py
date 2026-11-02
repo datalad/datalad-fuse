@@ -104,7 +104,9 @@ class DatasetAdapter:
                 self.annex = ds.repo
             else:
                 lgr.debug(
-                    "%s: git-annex not initialized and we were instructed not to initialize; will error out if reading annexed content", path
+                    "%s: git-annex not initialized and we were instructed not"
+                    " to initialize; will error out if reading annexed content",
+                    path,
                 )
                 self.annex = None
                 self.annex_disabled = True
@@ -625,8 +627,8 @@ class FsspecAdapter:
         Passed to each :class:`DatasetAdapter`.
     mode_transparent : bool
         Passed to each :class:`DatasetAdapter`.
-    **adapter_options
-        Further options passed to each :class:`DatasetAdapter`.
+    init_annex : bool
+        Passed to each :class:`DatasetAdapter`.
 
     Notes
     -----
@@ -639,12 +641,12 @@ class FsspecAdapter:
         root: str | Path,
         caching: bool,
         mode_transparent: bool = False,
-        **adapter_options: Any,
+        init_annex: bool = True,
     ) -> None:
         self.root = Path(root)
         self.mode_transparent = mode_transparent
         self.caching = caching
-        self.adapter_options = adapter_options
+        self.init_annex = init_annex
         self.datasets: dict[Path, DatasetAdapter] = {}
 
     def __enter__(self) -> FsspecAdapter:
@@ -694,7 +696,7 @@ class FsspecAdapter:
                 dspath,
                 mode_transparent=self.mode_transparent,
                 caching=self.caching,
-                **self.adapter_options,
+                init_annex=self.init_annex,
             )
         relpath = str(Path(filepath).relative_to(dspath))
         return dsap, relpath
