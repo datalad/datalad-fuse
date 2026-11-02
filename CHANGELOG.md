@@ -1,3 +1,22 @@
+# 0.8.0 (Mon Nov 02 2026)
+
+#### 🚀 Enhancement
+
+- ENH: add remfile backend with pluggable backend architecture [#131](https://github.com/datalad/datalad-fuse/pull/131) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🐛 Bug Fix
+
+- Opt-out of initializing git-annex when reading a dataset [#141](https://github.com/datalad/datalad-fuse/pull/141) ([@claude](https://github.com/claude) [@CodyCBakerPhD](https://github.com/CodyCBakerPhD))
+- Fix the failing daily Test runs (network/Forgejo jobs) [#143](https://github.com/datalad/datalad-fuse/pull/143) ([@claude](https://github.com/claude) [@CodyCBakerPhD](https://github.com/CodyCBakerPhD))
+
+#### Authors: 3
+
+- Claude ([@claude](https://github.com/claude))
+- Cody Baker ([@CodyCBakerPhD](https://github.com/CodyCBakerPhD))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.7.0 (Tue Oct 20 2026)
 
 #### 🚀 Enhancement
