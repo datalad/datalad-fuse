@@ -7,8 +7,8 @@ docs.
 ## Declare forwarded parameters explicitly
 
 When a class or function passes options on to another one (e.g.,
-`FsspecAdapter` creates a `DatasetAdapter` for each dataset, passing it
-`caching`, `mode_transparent`, and `init_annex`):
+`RemoteFilesystemAdapter` creates a `DatasetAdapter` for each dataset, passing
+it `caching`, `mode_transparent`, `init_annex`, and `backends`):
 
 - declare each forwarded option as an explicit parameter, with the same name,
   type, and default as in the callee;

@@ -18,15 +18,15 @@ The commands added to DataLad by ``datalad-fuse``, available from
    fsspec_cache_clear
 
 
-Opening files: ``datalad_fuse.fsspec``
-======================================
+Opening files: ``datalad_fuse.adapter``
+=======================================
 
-.. currentmodule:: datalad_fuse.fsspec
+.. currentmodule:: datalad_fuse.adapter
 
 .. autoclass:: DatasetAdapter
    :members: open, get_file_state, get_urls, clear, close
 
-.. autoclass:: FsspecAdapter
+.. autoclass:: RemoteFilesystemAdapter
    :members: open, get_file_state, is_under_annex, get_commit_datetime,
              resolve_dataset, get_dataset_path
 
@@ -34,6 +34,45 @@ Opening files: ``datalad_fuse.fsspec``
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. autofunction:: resolve_backends
+
+.. autofunction:: create_backends
+
+.. note::
+   Up to 0.7.0 these lived in ``datalad_fuse.fsspec``, and
+   `RemoteFilesystemAdapter` was called ``FsspecAdapter``.  Importing
+   ``FsspecAdapter``, ``DatasetAdapter``, ``FileState`` or ``is_http_url``
+   from ``datalad_fuse.fsspec`` still works, with a
+   :exc:`DeprecationWarning`.
+
+
+Backends: ``datalad_fuse.backends``
+===================================
+
+Backends do the actual reading of remote files; see :ref:`concepts-backends`.
+
+.. currentmodule:: datalad_fuse.backends
+
+.. autoclass:: Backend
+   :members: can_handle, open_url, clear
+
+.. autodata:: DEFAULT_BACKENDS
+
+.. currentmodule:: datalad_fuse.fsspec
+
+.. autoclass:: FsspecBackend
+   :members: can_handle, open_url, clear
+   :show-inheritance:
+
+.. currentmodule:: datalad_fuse.remfile
+
+.. autoclass:: RemfileBackend
+   :members: can_handle, open_url, clear
+   :show-inheritance:
+
+.. autoclass:: RemfileWrapper
+   :members: read, seek, tell, info, close
 
 
 git-annex helpers: ``datalad_fuse.utils``

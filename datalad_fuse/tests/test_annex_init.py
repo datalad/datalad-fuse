@@ -6,7 +6,7 @@ import subprocess
 from datalad.api import Dataset
 import pytest
 
-from datalad_fuse.fsspec import DatasetAdapter, FsspecAdapter
+from datalad_fuse.adapter import DatasetAdapter, RemoteFilesystemAdapter
 
 
 @pytest.fixture
@@ -48,7 +48,9 @@ def test_adapter_no_init_annex(annex_clone: Path) -> None:
 
 @pytest.mark.usefixtures("tmp_home")
 def test_adapter_passes_init_annex(annex_clone: Path) -> None:
-    with FsspecAdapter(annex_clone, caching=False, init_annex=False) as adapter:
+    with RemoteFilesystemAdapter(
+        annex_clone, caching=False, init_annex=False
+    ) as adapter:
         dsap, relpath = adapter.resolve_dataset(annex_clone / "data.bin")
         assert relpath == "data.bin"
         assert dsap.annex_disabled

@@ -46,6 +46,34 @@ features that are not released yet.  To install it:
    $ python3 -m pip install git+https://github.com/datalad/datalad-fuse.git
 
 
+.. _installation-backends:
+
+Optional backends
+=================
+
+Remote files are read by a *backend* (see :ref:`concepts-backends`).  fsspec,
+which handles every kind of file, is always installed.  `remfile
+<https://github.com/magland/remfile>`_, which is faster for
+NWB/HDF5 files, is optional:
+
+.. code-block:: console
+
+   $ python3 -m pip install "datalad-fuse[remfile]"
+
+The ``full`` extra installs every optional backend, currently the same one:
+
+.. code-block:: console
+
+   $ python3 -m pip install "datalad-fuse[full]"
+
+Installing remfile is enough to start using it: NWB/HDF5 files are read with
+it by default from then on.  Without it, those files are read with fsspec, as
+before.
+
+.. note::
+   The optional backends are newer than the 0.7.0 release.
+
+
 Checking the installation
 =========================
 
@@ -58,3 +86,9 @@ commands should print their help, and the version of git-annex and of
    $ datalad fusefs --help
    $ git annex version
    $ python3 -c "import datalad_fuse; print(datalad_fuse.__version__)"
+
+To check whether the optional remfile backend is available:
+
+.. code-block:: console
+
+   $ python3 -c "import remfile; print(remfile.__file__)"

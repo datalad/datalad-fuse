@@ -13,9 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from datalad_fuse.fsspec import DatasetAdapter
+from datalad_fuse.adapter import DatasetAdapter
 from datalad_fuse.utils import AnnexKey
-
 
 # --- remote.log parsing ---
 
@@ -261,9 +260,7 @@ def test_get_exporttree_urls_construction(adapter):
                 }
             ],
         ),
-        patch.object(
-            DatasetAdapter, "_list_s3_versions", return_value=versions
-        ),
+        patch.object(DatasetAdapter, "_list_s3_versions", return_value=versions),
     ):
         urls = list(adapter.get_exporttree_urls("sub-01/anat/sub-01_T1w.nii.gz", key))
 
@@ -338,9 +335,7 @@ def test_get_exporttree_urls_ambiguous_skips(adapter):
                 }
             ],
         ),
-        patch.object(
-            DatasetAdapter, "_list_s3_versions", return_value=versions
-        ),
+        patch.object(DatasetAdapter, "_list_s3_versions", return_value=versions),
     ):
         urls = list(adapter.get_exporttree_urls("sub-01/anat/sub-01_T1w.nii.gz", key))
 

@@ -35,6 +35,21 @@ is set:
 tox -e py3 -- --libfuse
 ```
 
+### Backend tests
+
+Remote files are read by a backend (`fsspec`, always installed, and the
+optional `remfile`).  `remfile` comes from the `full` extra, which tox
+installs only in envs whose name carries `full` or `libfuse`; tests that
+need it are skipped elsewhere via the `requires_remfile` marker.
+
+```bash
+# with remfile (and --libfuse)
+tox -e py314-full
+
+# only the backend tests, in whatever the current env has installed
+tox -e py3 -- datalad_fuse/tests/test_backends.py
+```
+
 ### Forgejo-aneksajo integration tests
 
 These tests start an ephemeral [Forgejo-aneksajo](https://codeberg.org/forgejo-aneksajo/forgejo-aneksajo)
