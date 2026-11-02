@@ -421,18 +421,35 @@ def forgejo_repo(
         )
 
         # Use the auth URL as the remote URL so git-annex can
-        # authenticate when probing the remote's .git/config during
-        # `git annex init`.  Aneksajo lazily initialises the repo-side
-        # annex (setting annex.uuid) on the first authenticated request
-        # to /config — see forgejo-aneksajo#113.
+        # authenticate when probing the remote's .git/config.  Aneksajo
+        # lazily initialises the repo-side annex (setting annex.uuid) on the
+        # first authenticated request to /config — see forgejo-aneksajo#113.
         ds.repo.add_remote("forgejo", auth_url)
 
         for iter in range(4):
+            # --no-verify: since 10.20261026, git-annex installs a pre-push
+            # hook, which reads the config of remotes whose annex-uuid is
+            # not yet known.  That authenticated request to /config makes
+            # aneksajo initialise its annex, creating the remote's git-annex
+            # branch while this push is underway, so pushing ours fails with
+            # "reference already exists".  The annex-uuid is discovered below.
             ds.repo.call_git(
-                ["push", "forgejo", ds.repo.get_active_branch(), "git-annex"]
+                [
+                    "push",
+                    "--no-verify",
+                    "forgejo",
+                    ds.repo.get_active_branch(),
+                    "git-annex",
+                ]
             )
             ds.repo.call_git(["fetch", "forgejo"])
-            ds.repo.call_git(["annex", "init"])
+            # Probe the remote's config now that our branches are there, so
+            # git-annex records remote.forgejo.annex-uuid.  Any git-annex
+            # command that loads the remote list does that; `git annex init`
+            # no longer does in an initialised repository since 10.20261026.
+            # Until the UUID is known, `info` fails to resolve the remote, so
+            # ignore its exit status and try again on the next iteration.
+            ds.repo.call_git_success(["annex", "info", "--fast", "forgejo"])
             ds.config.reload()
             for cfg in "annex-ignore", "annex-ignore-auto":
                 cfg_ = f"remote.forgejo.{cfg}"
