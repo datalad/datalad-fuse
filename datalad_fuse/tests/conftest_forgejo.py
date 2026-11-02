@@ -428,8 +428,20 @@ def forgejo_repo(
         ds.repo.add_remote("forgejo", auth_url)
 
         for iter in range(4):
+            # --no-verify: since 10.20261026, git-annex installs a pre-push
+            # hook, which reads the config of remotes whose annex-uuid is
+            # not yet known.  That authenticated request to /config makes
+            # aneksajo initialise its annex, creating the remote's git-annex
+            # branch while this push is underway, so pushing ours fails with
+            # "reference already exists".  The annex-uuid is discovered below.
             ds.repo.call_git(
-                ["push", "forgejo", ds.repo.get_active_branch(), "git-annex"]
+                [
+                    "push",
+                    "--no-verify",
+                    "forgejo",
+                    ds.repo.get_active_branch(),
+                    "git-annex",
+                ]
             )
             ds.repo.call_git(["fetch", "forgejo"])
             ds.repo.call_git(["annex", "init"])
