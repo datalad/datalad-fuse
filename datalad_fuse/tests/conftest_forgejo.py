@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import uuid as uuid_mod
 
 from datalad.api import Dataset
+from datalad.support.exceptions import CommandError
 import pytest
 import requests
 
@@ -421,10 +422,9 @@ def forgejo_repo(
         )
 
         # Use the auth URL as the remote URL so git-annex can
-        # authenticate when probing the remote's .git/config during
-        # `git annex init`.  Aneksajo lazily initialises the repo-side
-        # annex (setting annex.uuid) on the first authenticated request
-        # to /config — see forgejo-aneksajo#113.
+        # authenticate when probing the remote's .git/config.  Aneksajo
+        # lazily initialises the repo-side annex (setting annex.uuid) on the
+        # first authenticated request to /config — see forgejo-aneksajo#113.
         ds.repo.add_remote("forgejo", auth_url)
 
         for iter in range(4):
@@ -444,7 +444,16 @@ def forgejo_repo(
                 ]
             )
             ds.repo.call_git(["fetch", "forgejo"])
-            ds.repo.call_git(["annex", "init"])
+            # Probe the remote's config now that our branches are there, so
+            # git-annex records remote.forgejo.annex-uuid.  Any git-annex
+            # command that loads the remote list does that; `git annex init`
+            # no longer does in an initialised repository since 10.20261026.
+            # Until the UUID is known, `info` fails to resolve the remote,
+            # so try again on the next iteration.
+            try:
+                ds.repo.call_git(["annex", "info", "--fast", "forgejo"])
+            except CommandError as e:
+                lgr.info("iter %d: git annex info forgejo failed: %s", iter, e)
             ds.config.reload()
             for cfg in "annex-ignore", "annex-ignore-auto":
                 cfg_ = f"remote.forgejo.{cfg}"
