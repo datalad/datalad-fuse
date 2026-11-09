@@ -153,10 +153,9 @@ annex key (``SHA256E``, ``MD5E`` and other ``*E`` backends keep it), falling
 back to the extension of the file's path for keys that carry none, such as
 the ``URL``/``VURL`` keys that ``git annex addurl --fast`` produces.
 
-.. note::
-   Backends are newer than the 0.7.0 release.  Up to 0.7.0, all files were
-   read with fsspec, which remains the behaviour when remfile is not
-   installed.
+.. versionadded:: 0.8.0
+   Backends.  Up to 0.7.0, all files were read with fsspec, which remains
+   the behaviour when remfile is not installed.
 
 
 Reading only what is needed

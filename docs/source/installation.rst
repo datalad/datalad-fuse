@@ -70,8 +70,8 @@ Installing remfile is enough to start using it: NWB/HDF5 files are read with
 it by default from then on.  Without it, those files are read with fsspec, as
 before.
 
-.. note::
-   The optional backends are newer than the 0.7.0 release.
+.. versionadded:: 0.8.0
+   The optional backends.
 
 
 Checking the installation

@@ -17,7 +17,7 @@ from .adapter import DatasetAdapter
 @build_doc
 class FsspecCacheClear(Interface):
     """
-    Clear fsspec cache
+    Clear the on-disk caches of data fetched from remote URLs
     """
 
     _params_ = {
@@ -42,7 +42,7 @@ class FsspecCacheClear(Interface):
         dataset: Optional[Dataset] = None, recursive: bool = False
     ) -> Iterator[Dict[str, Any]]:
         ds = require_dataset(
-            dataset, purpose="clear fsspec cache", check_installed=True
+            dataset, purpose="clear on-disk cache", check_installed=True
         )
         DatasetAdapter(ds.path, caching=True).clear()
         yield get_status_dict(action="fsspec-cache-clear", ds=ds, status="ok")
