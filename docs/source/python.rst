@@ -85,8 +85,19 @@ failing that the default ``"remfile,fsspec"``
 (`~datalad_fuse.backends.DEFAULT_BACKENDS`).  See :ref:`concepts-backends`
 for what the backends do.
 
-.. note::
-   The ``backends`` argument is newer than the 0.7.0 release.
+.. versionadded:: 0.8.0
+   The ``backends`` argument.
+
+In a dataset obtained with a plain ``git clone``, git-annex is not yet
+initialized, and the first ``git annex`` command run on it initializes it,
+modifying the repository.  To leave such a dataset untouched, pass
+``init_annex=False``: then no ``git annex`` command is run, files tracked by
+git and annexed files with local content can still be opened, but opening
+annexed files without content raises an :exc:`OSError`.  The adapter's
+``annex_initialized`` attribute tells whether git-annex was initialized.
+
+.. versionadded:: 0.8.0
+   The ``init_annex`` argument.
 
 The adapter starts ``git annex`` processes to answer its queries;
 ``close()``, called by :func:`contextlib.closing` above, stops them.
