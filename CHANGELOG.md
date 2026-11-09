@@ -1,3 +1,15 @@
+# 0.8.2 (Mon Nov 09 2026)
+
+#### 🏠 Internal
+
+- BF(CI): publish to PyPI via trusted publishing; SPDX license metadata [#146](https://github.com/datalad/datalad-fuse/pull/146) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 1
+
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.8.1 (Mon Nov 09 2026)
 
 #### 📝 Documentation
