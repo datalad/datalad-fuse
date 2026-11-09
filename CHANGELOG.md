@@ -1,3 +1,15 @@
+# 0.8.1 (Mon Nov 09 2026)
+
+#### 📝 Documentation
+
+- DOC: reflect the 0.8.0 release; document init_annex; fix cache-clear help [#145](https://github.com/datalad/datalad-fuse/pull/145) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 1
+
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # 0.8.0 (Mon Nov 02 2026)
 
 #### 🚀 Enhancement
