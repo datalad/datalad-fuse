@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 import subprocess
+import warnings
 
 from datalad.api import Dataset
 import pytest
@@ -44,6 +46,19 @@ def test_adapter_no_init_annex(annex_clone: Path) -> None:
     finally:
         dsap.close()
     assert annex_uuid(annex_clone) == ""
+
+
+@pytest.mark.ai_generated
+@pytest.mark.usefixtures("tmp_home")
+def test_adapter_no_init_annex_no_unclosed_files(annex_clone: Path) -> None:
+    """With ``init_annex=False``, DataLad does not load a clone in which
+    git-annex is not initialized as a git-annex repository, which would leave
+    the pipes of a ``git`` process unclosed"""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", ResourceWarning)
+        DatasetAdapter(annex_clone, caching=False, init_annex=False).close()
+        gc.collect()
+    assert [x for x in w if issubclass(x.category, ResourceWarning)] == []
 
 
 @pytest.mark.usefixtures("tmp_home")

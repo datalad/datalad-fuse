@@ -39,6 +39,8 @@ Opening files: ``datalad_fuse.adapter``
 
 .. autofunction:: create_backends
 
+.. autofunction:: is_annex_initialized
+
 .. note::
    Up to 0.7.0 these lived in ``datalad_fuse.fsspec``, and
    `RemoteFilesystemAdapter` was called ``FsspecAdapter``.  Importing
