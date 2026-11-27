@@ -217,6 +217,29 @@ Besides ``open()``, ``get_file_state()`` and ``is_under_annex()``, it offers
 containing a path) and ``resolve_dataset()`` (the
 `~datalad_fuse.adapter.DatasetAdapter` and relative path used for a path).
 
+Reading files of any dataset from a library
+-------------------------------------------
+
+Code that opens files over a long time, such as a library, cannot easily use
+an adapter as a context manager.  `~datalad_fuse.adapter.get_shared_adapter`
+returns a `~datalad_fuse.adapter.RemoteFilesystemAdapter` rooted at the
+filesystem root, shared by all callers passing the same options, and closed
+when the interpreter exits:
+
+.. code-block:: python
+
+   import os
+
+   from datalad_fuse.adapter import get_shared_adapter
+
+   adapter = get_shared_adapter(caching=False, init_annex=False)
+   path = os.path.abspath(nwb_path)
+   with adapter.open(path) as f:
+       header = f.read(1024)
+
+.. versionadded:: 0.9.0
+   `~datalad_fuse.adapter.get_shared_adapter`.
+
 
 .. _python-commands:
 

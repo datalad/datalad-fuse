@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import atexit
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from enum import Enum
+from functools import cache
 from itertools import chain
 import json
 import logging
@@ -831,3 +833,47 @@ class RemoteFilesystemAdapter:
         """Return the date of ``HEAD`` in the dataset containing ``filepath``"""
         dsap, _ = self.resolve_dataset(filepath)
         return dsap.commit_dt
+
+
+def get_shared_adapter(
+    caching: bool,
+    mode_transparent: bool = False,
+    init_annex: bool = True,
+    backends: Optional[str] = None,
+) -> RemoteFilesystemAdapter:
+    """Return a :class:`RemoteFilesystemAdapter` for the files of any dataset,
+    shared by all callers passing the same options
+
+    The adapter is rooted at the filesystem root, so it takes the absolute path
+    of any file, and it is closed when the Python interpreter exits normally
+    (see :mod:`atexit`).  This suits code, such as a library, that opens files
+    over a long time and so cannot use an adapter as a context manager.
+
+    Parameters
+    ----------
+    caching : bool
+        Passed to the :class:`RemoteFilesystemAdapter`.
+    mode_transparent : bool
+        Passed to the :class:`RemoteFilesystemAdapter`.
+    init_annex : bool
+        Passed to the :class:`RemoteFilesystemAdapter`.
+    backends : str, optional
+        Passed to the :class:`RemoteFilesystemAdapter`.
+    """
+    # Cached on all the options, however they were passed
+    return _get_shared_adapter(caching, mode_transparent, init_annex, backends)
+
+
+@cache
+def _get_shared_adapter(
+    caching: bool, mode_transparent: bool, init_annex: bool, backends: Optional[str]
+) -> RemoteFilesystemAdapter:
+    adapter = RemoteFilesystemAdapter(
+        Path(os.path.abspath(os.sep)),
+        caching=caching,
+        mode_transparent=mode_transparent,
+        init_annex=init_annex,
+        backends=backends,
+    )
+    atexit.register(adapter.__exit__, None, None, None)
+    return adapter

@@ -30,6 +30,8 @@ Opening files: ``datalad_fuse.adapter``
    :members: open, get_file_state, is_under_annex, get_commit_datetime,
              resolve_dataset, get_dataset_path
 
+.. autofunction:: get_shared_adapter
+
 .. autoclass:: FileState
    :members:
    :undoc-members:
