@@ -150,7 +150,7 @@ class TestRemfileBackendProbe:
         urlopen = MagicMock(return_value=resp)
         monkeypatch.setattr("urllib.request.urlopen", urlopen)
         backend.open_url("http://example.com/x.h5")
-        assert fake.File.call_args.kwargs["_size"] == 177728
+        assert fake.File.call_args.kwargs["size"] == 177728
         # A short, retry-free timeout is the point of probing here.
         assert urlopen.call_args.kwargs["timeout"] == RemfileBackend.PROBE_TIMEOUT
         req = urlopen.call_args.args[0]
@@ -162,7 +162,7 @@ class TestRemfileBackendProbe:
         resp = _probe_response({"Content-Length": "4096"}, status=200)
         monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=resp))
         backend.open_url("http://example.com/x.h5")
-        assert fake.File.call_args.kwargs["_size"] == 4096
+        assert fake.File.call_args.kwargs["size"] == 4096
 
     def test_unknown_size_lets_remfile_probe(self, tmp_path, monkeypatch) -> None:
         """An unparsable size is not fatal — remfile falls back to its own."""
@@ -170,7 +170,7 @@ class TestRemfileBackendProbe:
         resp = _probe_response({"Content-Range": "bytes 0-0/*"})
         monkeypatch.setattr("urllib.request.urlopen", MagicMock(return_value=resp))
         backend.open_url("http://example.com/x.h5")
-        assert fake.File.call_args.kwargs["_size"] is None
+        assert fake.File.call_args.kwargs["size"] is None
 
     def test_probe_failure_propagates_without_opening(
         self, tmp_path, monkeypatch
