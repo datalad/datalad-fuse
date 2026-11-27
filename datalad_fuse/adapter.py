@@ -23,6 +23,7 @@ from botocore.config import Config as BotocoreConfig
 from datalad import cfg
 from datalad.distribution.dataset import Dataset
 from datalad.support.annexrepo import AnnexRepo
+from datalad.support.gitrepo import GitRepo
 from datalad.utils import get_dataset_root
 import methodtools
 
@@ -144,6 +145,20 @@ def is_http_url(s: str) -> bool:
     return s.lower().startswith(("http://", "https://"))
 
 
+def is_annex_initialized(path: str | Path) -> bool:
+    """Whether git-annex is initialized in the git repository at ``path``
+
+    That is, whether ``annex.uuid`` is set in its configuration, which
+    ``git annex init`` sets.  No ``git annex`` command is run.
+    """
+    r = subprocess.run(
+        ["git", "-C", str(path), "config", "--get", "annex.uuid"],
+        capture_output=True,
+        text=True,
+    )
+    return r.returncode == 0 and bool(r.stdout.strip())
+
+
 _aneksajo_cache: dict[str, bool] = {}
 
 
@@ -239,29 +254,28 @@ class DatasetAdapter:
     ) -> None:
         self.path = Path(path)
         self.mode_transparent = mode_transparent
-        ds = Dataset(path)
-        self.annex: Optional[AnnexRepo]
+        self.annex: Optional[AnnexRepo] = None
         #: Whether git-annex is initialized in the dataset (it is not after a
         #: plain ``git clone``)
-        self.annex_initialized = False
-        if isinstance(ds.repo, AnnexRepo):
-            self.annex_initialized = bool(ds.repo.config.get("annex.uuid"))
-            if self.annex_initialized or init_annex:
-                self.annex = ds.repo
-            else:
-                lgr.debug(
-                    "%s: git-annex not initialized and we were instructed not"
-                    " to initialize; will error out if reading annexed content",
-                    path,
-                )
-                self.annex = None
-                self.annex_disabled = True
+        self.annex_initialized = is_annex_initialized(self.path)
+        repo: GitRepo
+        if self.annex_initialized or init_annex:
+            repo = Dataset(path).repo
+            if isinstance(repo, AnnexRepo):
+                self.annex = repo
         else:
-            self.annex = None
-        self.commit_dt = datetime.fromtimestamp(
-            ds.repo.get_commit_date(), tz=timezone.utc
-        )
-        spec, explicit = resolve_backends(backends, config=ds.config)
+            lgr.debug(
+                "%s: git-annex not initialized and we were instructed not"
+                " to initialize; will error out if reading annexed content",
+                path,
+            )
+            # Not loaded by DataLad as a git-annex repository: checking whether
+            # a repository without git-annex initialized has a git-annex
+            # branch, it leaves the pipes of the `git` process unclosed.
+            repo = GitRepo(path)
+            self.annex_disabled = True
+        self.commit_dt = datetime.fromtimestamp(repo.get_commit_date(), tz=timezone.utc)
+        spec, explicit = resolve_backends(backends, config=repo.config)
         self._backends = create_backends(spec, path, caching, explicit=explicit)
 
     def close(self) -> None:

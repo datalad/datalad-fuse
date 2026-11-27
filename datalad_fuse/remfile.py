@@ -97,8 +97,8 @@ class RemfileBackend(Backend):
                 f"RemfileBackend only supports mode='rb', got {mode!r}"
             )
         size = self._probe_size(url)
-        # `_size` is private API; see the remfile pin in setup.cfg.
-        remfile_obj = self._remfile.File(url, _size=size, disk_cache=self._disk_cache)
+        # Passing the size skips remfile's own (retrying) size probe.
+        remfile_obj = self._remfile.File(url, size=size, disk_cache=self._disk_cache)
         return cast(IO, RemfileWrapper(remfile_obj, url))
 
     def clear(self) -> None:
