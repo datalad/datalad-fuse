@@ -185,6 +185,21 @@ The possible states are described in :doc:`concepts`.
 `~datalad_fuse.utils.AnnexKey` can also parse and format keys on its own (see
 :doc:`api`).
 
+``get_remote_content()``, on both adapters, does the above in one call: for
+an annexed file whose content is not present locally, it returns a
+`~datalad_fuse.adapter.RemoteContent` with the key and the URLs, and `None`
+for any other file:
+
+.. code-block:: python
+
+   with closing(DatasetAdapter("000582", caching=False)) as dsa:
+       content = dsa.get_remote_content(nwb_path)
+       if content is not None:
+           print(content.key.size, content.urls[0])
+
+.. versionadded:: 0.9.0
+   ``get_remote_content()``.
+
 
 Datasets with subdatasets
 =========================

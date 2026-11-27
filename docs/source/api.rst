@@ -24,16 +24,19 @@ Opening files: ``datalad_fuse.adapter``
 .. currentmodule:: datalad_fuse.adapter
 
 .. autoclass:: DatasetAdapter
-   :members: open, get_file_state, get_urls, clear, close
+   :members: open, get_file_state, get_urls, get_remote_content, clear, close
 
 .. autoclass:: RemoteFilesystemAdapter
-   :members: open, get_file_state, is_under_annex, get_commit_datetime,
-             resolve_dataset, get_dataset_path
+   :members: open, get_file_state, get_remote_content, is_under_annex,
+             get_commit_datetime, resolve_dataset, get_dataset_path
 
 .. autoclass:: FileState
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. autoclass:: RemoteContent
+   :members:
 
 .. autofunction:: resolve_backends
 

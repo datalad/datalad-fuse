@@ -39,6 +39,7 @@ def test_adapter_no_init_annex(annex_clone: Path) -> None:
         state, key = dsap.get_file_state("data.bin")
         assert state.name == "NO_CONTENT"
         assert key is not None and key.size == 10_000
+        assert dsap.get_remote_content("data.bin") is None
         with pytest.raises(IOError, match="not initialized"):
             dsap.open("data.bin")
     finally:
