@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from itertools import chain
@@ -47,6 +48,18 @@ class FileState(Enum):
     #: The file is annexed and its content is present locally; it is read from
     #: disk.
     HAS_CONTENT = 3
+
+
+@dataclass(frozen=True)
+class RemoteContent:
+    """The content of an annexed file that is not present locally, as returned
+    by ``get_remote_content()``"""
+
+    #: The git-annex key of the content
+    key: AnnexKey
+    #: The http(s) URLs found for the content, in the order in which they are
+    #: tried by ``open()`` (see :meth:`DatasetAdapter.get_urls`)
+    urls: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +415,31 @@ class DatasetAdapter:
                     ]
                 for p in paths:
                     yield base_stripped + "/" + p
+
+    def get_remote_content(self, relpath: str) -> Optional[RemoteContent]:
+        """Return the key and the URLs of the content of an annexed file that
+        is not present locally
+
+        Parameters
+        ----------
+        relpath : str
+            Path of the file relative to the top directory of the dataset.
+
+        Returns
+        -------
+        RemoteContent or None
+            `None` if the file is not annexed, if its content is present
+            locally, or if git-annex is not available in the dataset (see
+            ``init_annex``).  ``urls`` is empty if git-annex knows no http(s)
+            URL for the content, although :meth:`open` may still read it from
+            an S3 special remote with ``exporttree=yes``.
+        """
+        if self.annex is None:
+            return None
+        state, key = self.get_file_state(relpath)
+        if state is not FileState.NO_CONTENT or key is None:
+            return None
+        return RemoteContent(key=key, urls=list(self.get_urls(str(key))))
 
     @methodtools.lru_cache(maxsize=1)
     def _get_exporttree_remotes(self) -> list[dict[str, str]]:
@@ -820,6 +858,12 @@ class RemoteFilesystemAdapter:
         """Return state and key of a file; see `DatasetAdapter.get_file_state`"""
         dsap, relpath = self.resolve_dataset(filepath)
         return cast(Tuple[FileState, Optional[AnnexKey]], dsap.get_file_state(relpath))
+
+    def get_remote_content(self, filepath: str | Path) -> Optional[RemoteContent]:
+        """Return the key and the URLs of the content of an annexed file that
+        is not present locally; see :meth:`DatasetAdapter.get_remote_content`"""
+        dsap, relpath = self.resolve_dataset(filepath)
+        return dsap.get_remote_content(relpath)
 
     def is_under_annex(self, filepath: str | Path) -> bool:
         """Tell whether a file is annexed"""
